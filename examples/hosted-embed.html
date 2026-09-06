@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orb - hosted embed</title>
+
+<!--
+  The hosted path. element.js below is loaded cross-origin from the absolute
+  https:// URL a customer is given. Nothing bundled, no build step.
+
+  To test locally, point the src at ../src/element.js and serve this directory
+  over http (python -m http.server 8000). A file:// page has an opaque origin
+  and cannot load ES modules at all.
+-->
+<script type="module" src="https://xyorb.vidome.app/v1/element.js"></script>
+
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    margin: 0;
+    padding: 48px 24px 64px;
+    background: #0b0d12;
+    color: #e8ecf4;
+    font: 15px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    text-align: center;
+  }
+  h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; letter-spacing: -0.01em; }
+  p.sub { margin: 0 0 36px; color: #9aa4b8; font-size: 13px; }
+  .stage { display: flex; justify-content: center; }
+  .row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 32px; }
+  button {
+    font: inherit; font-size: 13px; color: #e8ecf4;
+    background: #171b24; border: 1px solid #2a3140; border-radius: 999px;
+    padding: 7px 16px; cursor: pointer;
+  }
+  button[aria-pressed="true"] { background: #263043; border-color: #46536e; }
+  button:hover { border-color: #46536e; }
+  .note { margin-top: 28px; color: #6f7a8f; font-size: 12px; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #9aa4b8; }
+</style>
+</head>
+<body>
+
+  <h1>Orb, embedded from the hosted URL</h1>
+  <p class="sub">One script tag and one custom element.</p>
+
+  <div class="stage">
+    <orb-js id="orb" seed="agent-7" size="240" state="idle"></orb-js>
+  </div>
+
+  <div class="row" id="states">
+    <button data-state="idle" aria-pressed="true">idle</button>
+    <button data-state="listening" aria-pressed="false">listening</button>
+    <button data-state="thinking" aria-pressed="false">thinking</button>
+    <button data-state="speaking" aria-pressed="false">speaking</button>
+  </div>
+
+  <div class="row">
+    <button id="mic">Bind microphone</button>
+    <button id="demo">Bind demo voice</button>
+    <button id="detach">Detach audio</button>
+  </div>
+
+  <p class="note">
+    Loaded from <code>https://xyorb.vidome.app/v1/element.js</code>, which pulls
+    <code>./orb.js</code> from the same versioned path.
+  </p>
+
+<script>
+  var orb = document.getElementById('orb');
+
+  function setState(name) {
+    orb.state = name;
+    var all = document.querySelectorAll('#states button');
+    for (var i = 0; i < all.length; i++) {
+      all[i].setAttribute('aria-pressed', String(all[i].dataset.state === name));
+    }
+  }
+
+  document.getElementById('states').addEventListener('click', function (e) {
+    var btn = e.target.closest('button');
+    if (btn) setState(btn.dataset.state);
+  });
+
+  // listenTo() takes a MediaStream, a track, an <audio> element, an AnalyserNode,
+  // an AudioNode, a (t) => 0..1 function, a number, or these strings.
+  document.getElementById('mic').addEventListener('click', function () {
+    orb.listenTo('microphone');
+    setState('listening');
+  });
+
+  document.getElementById('demo').addEventListener('click', function () {
+    orb.listenTo('speech');
+    setState('speaking');
+  });
+
+  document.getElementById('detach').addEventListener('click', function () {
+    orb.unlisten();
+    setState('idle');
+  });
+</script>
+
+</body>
+</html>

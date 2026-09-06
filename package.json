@@ -1,0 +1,57 @@
+{
+  "name": "orb.js",
+  "version": "1.0.0",
+  "description": "Audio-reactive procedural galaxy-in-glass orb for AI voice agents. WebGL1, zero dependencies, no build step.",
+  "keywords": [
+    "orb",
+    "webgl",
+    "audio-reactive",
+    "voice-agent",
+    "visualizer",
+    "galaxy",
+    "procedural",
+    "generative",
+    "shader",
+    "web-component",
+    "react",
+    "zero-dependencies"
+  ],
+  "author": "Earl Balai",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./src/orb.js",
+  "module": "./src/orb.js",
+  "exports": {
+    ".": "./src/orb.js",
+    "./element": "./src/element.js",
+    "./react": "./src/react.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src/orb.js",
+    "src/element.js",
+    "src/react.js",
+    "index.html",
+    "examples",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "dev": "python -m http.server 8756"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/earlbalai/orb.js.git"
+  },
+  "homepage": "https://xyorb.vidome.app/",
+  "bugs": {
+    "url": "https://github.com/earlbalai/orb.js/issues"
+  }
+}

@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orb - OpenAI voice</title>
+
+<!--
+  Orb by Earl Balai. OpenAI voice example.
+
+  Every other example taps a microphone or fakes the amplitude. This one fetches
+  OpenAI text-to-speech audio, plays it, and points the orb's AnalyserNode at
+  the actual waveform, so the motion is measured from the voice you hear.
+
+  The integration is two lines:
+
+      import { speak } from '../src/voice.js';
+      await speak(orb, 'Hello, I am your agent.', { voice: 'alloy' });
+
+  The key never reaches this page. There is none in this file, none in voice.js,
+  none anywhere the browser can see. OPENAI_API_KEY lives only in a Vercel
+  Environment Variable, read server-side by /api/tts. The browser sends text and
+  gets audio bytes back. Any key shipped to a browser is a public key, whether
+  it is in a script tag, a bundle or a temporary default.
+
+  Setting it up: Vercel project > Settings > Environment Variables >
+  OPENAI_API_KEY, then redeploy. Locally, put it in your shell and run
+  vercel dev.
+
+  Secrecy is not the only reason for the endpoint. Audio fetched cross-origin
+  cannot be read by an AnalyserNode. Tap it anyway and Web Audio hands you a
+  tainted node that reads pure silence, with no error reported anywhere, and the
+  element's audio is dead for the rest of the page's life. Orb catches that and
+  falls back to a synthetic envelope, which is plausible motion but a fake curve
+  running next to real speech. Serving the bytes from our own origin and giving
+  the <audio> element a blob: URL makes the audio same-origin by construction,
+  so the analysis is real and the readout below can say which one you got.
+
+  Running it. On a static server (npm run dev, python -m http.server, anything)
+  the page renders and the fallback button works with no setup, but Speak fails,
+  because a static server has no serverless functions: either /api/tts is
+  unreachable, or python's http.server answers 501 to the POST and it reports no
+  key configured. Both are expected and both have the same fix. Under vercel dev
+  or a deployment with OPENAI_API_KEY set, Speak gives you a real voice.
+-->
+
+<style>
+  :root { --bg:#07080c; --panel:#11131a; --line:#232733; --fg:#e8ebf2;
+          --dim:#8b93a7; --accent:#7dd3fc; --warn:#fbbf24; --ok:#4ade80;
+          --bad:#f87171; }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+         padding:32px 20px; background:var(--bg); color:var(--fg);
+         font:14px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .card { width:100%; max-width:560px; background:var(--panel); border:1px solid var(--line);
+          border-radius:18px; padding:28px; text-align:center; }
+  h1 { margin:0 0 4px; font-size:17px; font-weight:600; letter-spacing:-0.01em; }
+  .sub { margin:0 0 20px; color:var(--dim); font-size:13px; }
+  #orb-slot { display:flex; justify-content:center; align-items:center; min-height:260px; }
+
+  textarea { width:100%; margin-top:18px; resize:vertical; min-height:74px;
+             font:13px/1.5 inherit; color:var(--fg); background:#0c0e14;
+             border:1px solid var(--line); border-radius:12px; padding:10px 12px; }
+  textarea:focus, select:focus { outline:none; border-color:#39414f; }
+
+  .row { display:flex; gap:10px; justify-content:center; align-items:center;
+         margin-top:12px; flex-wrap:wrap; }
+  label { color:var(--dim); font-size:12px; }
+  select { font:inherit; font-size:13px; color:var(--fg); background:#1b1f29;
+           border:1px solid var(--line); border-radius:999px; padding:8px 12px; }
+  button { font:inherit; font-weight:550; padding:9px 18px; border-radius:999px;
+           border:1px solid var(--line); background:#1b1f29; color:var(--fg); cursor:pointer; }
+  button:hover:not(:disabled) { border-color:#39414f; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#06121a; }
+  button:disabled { opacity:0.4; cursor:default; }
+
+  .divider { margin:22px 0 0; border-top:1px solid var(--line); padding-top:16px; }
+  .hint { color:var(--dim); font-size:12px; margin:8px 0 0; }
+
+  #status { margin-top:16px; min-height:34px; font-size:12.5px; color:var(--dim); }
+  .ok { color:var(--ok); } .warn { color:var(--warn); } .bad { color:var(--bad); }
+  code { font:12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+         background:#0c0e14; border:1px solid var(--line); border-radius:5px; padding:1px 5px; }
+
+  .note { margin-top:20px; text-align:left; font-size:12px; color:var(--dim);
+          background:#0c0e14; border:1px solid var(--line); border-radius:12px; padding:12px 14px; }
+  .note b { color:var(--fg); font-weight:600; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h1>Real voice</h1>
+  <p class="sub">OpenAI speech, served from our own origin, measured by the orb.</p>
+
+  <div id="orb-slot"></div>
+
+  <!-- the real-voice controls -->
+  <textarea id="text" rows="3" spellcheck="false"></textarea>
+
+  <div class="row">
+    <label for="voice">Voice</label>
+    <select id="voice"></select>
+    <button id="speak" class="primary" type="button">Speak</button>
+    <button id="stop" type="button" disabled>Stop</button>
+  </div>
+
+  <!-- the zero-setup fallback -->
+  <div class="divider">
+    <button id="fallback" type="button">Fallback: synthesised voice (no API key needed)</button>
+    <p class="hint">
+      Formant babble generated in the browser by <code>OrbAudioSource.speech()</code>.
+      Audible and genuinely analysed, just not a human voice. It is here so the page
+      shows you something with nothing configured.
+    </p>
+  </div>
+
+  <div id="status">Ready.</div>
+
+  <div class="note">
+    <b>Requires <code>OPENAI_API_KEY</code> set as a Vercel Environment Variable.</b>
+    It is read server-side by <code>/api/tts</code> and <b>never reaches the browser</b>.
+    This page only sends text and receives audio bytes. Without the key the endpoint
+    answers <code>501</code> and the fallback button above still works.
+  </div>
+</div>
+
+<script type="module">
+  import { createOrb, OrbAudioSource, resumeAudio } from '../src/orb.js';
+  import { speak, stopSpeaking, isNotConfigured, VOICES, DEFAULT_VOICE } from '../src/voice.js';
+
+  const $ = (id) => document.getElementById(id);
+  const statusEl = $('status');
+
+  /** Write a line under the controls. cls is '', 'ok', 'warn' or 'bad'. */
+  function say(html, cls) {
+    statusEl.innerHTML = cls ? '<span class="' + cls + '">' + html + '</span>' : html;
+  }
+
+  // Fixed seed, so palette, archetype and galaxy structure survive a reload and
+  // screenshots stay comparable.
+  const orb = createOrb($('orb-slot'), {
+    seed: 'earlbalai-openai-voice',
+    size: 240,
+    state: 'idle',
+  });
+
+  // VOICES is the convenience list from voice.js. The server validates whatever
+  // it is actually sent, so this only saves typing.
+  const voiceSelect = $('voice');
+  for (const name of VOICES) {
+    const option = document.createElement('option');
+    option.value = name;
+    option.textContent = name;
+    if (name === DEFAULT_VOICE) option.selected = true;
+    voiceSelect.appendChild(option);
+  }
+
+  $('text').value =
+    'Hello. I am the Orb, and this is a real voice rather than a synthesised tone. ' +
+    'Every flicker you are watching is measured from this waveform as it plays.';
+
+  // speak() does the whole dance: resume the AudioContext from this gesture, POST
+  // the text, wrap the bytes in a blob: URL, play them, tap the analyser, hold
+  // 'speaking', clean up at the end.
+  let utterance = null;   // the live handle, so Stop has something to cancel
+
+  $('speak').addEventListener('click', async () => {
+    const text = $('text').value.trim();
+    if (!text) { say('Type something to say first.', 'warn'); return; }
+
+    setBusy(true);
+    say('Fetching audio from <code>/api/tts</code>...');
+
+    // Calling speak() again mid-playback is safe, it interrupts. The handle is a
+    // Promise that also carries .cancel(), .analysed and .sourceKind.
+    utterance = speak(orb, text, { voice: voiceSelect.value });
+
+    // Which analysis path we ended up on, once playback has begun.
+    const reportOnce = setInterval(() => {
+      if (!utterance || !utterance.sourceKind) return;
+      clearInterval(reportOnce);
+      say(utterance.analysed
+        ? 'Speaking - orb is reading the <b>real waveform</b>.'
+        : 'Speaking - fell back to a <b>synthetic envelope</b> (audio was not analysable).',
+        utterance.analysed ? 'ok' : 'warn');
+    }, 60);
+
+    try {
+      await utterance;
+      clearInterval(reportOnce);
+      say('Finished.', 'ok');
+    } catch (err) {
+      clearInterval(reportOnce);
+
+      // No key on the server is a deployment state, not a crash, and the fallback
+      // still works. Worth its own message.
+      if (isNotConfigured(err)) {
+        say('No <code>OPENAI_API_KEY</code> configured on the server, so ' +
+            '<code>/api/tts</code> answered 501. Set it in Vercel and redeploy - ' +
+            'or press the fallback button to hear the synthesised voice.', 'warn');
+      } else {
+        say(escapeHtml(err.message || String(err)), 'bad');
+      }
+      console.error(err);
+    } finally {
+      utterance = null;
+      setBusy(false);
+    }
+  });
+
+  $('stop').addEventListener('click', () => {
+    stopSpeaking(orb);          // resolves the pending promise; not an error
+    say('Stopped.');
+  });
+
+  // speech() synthesises audible formant babble with Web Audio and routes it
+  // through the same analyser path real audio takes, so the orb is measuring
+  // something genuine, just not a human voice.
+  //
+  // Needs a gesture. Browsers open the AudioContext suspended, and a suspended
+  // context makes no sound and reads zero.
+  let stopFallback = null;
+
+  $('fallback').addEventListener('click', async () => {
+    if (stopFallback) { endFallback(); return; }
+
+    stopSpeaking(orb);              // never run both at once
+    await resumeAudio();            // same gesture, so this is allowed
+
+    stopFallback = orb.listenTo(OrbAudioSource.speech());
+    orb.state = 'speaking';
+    $('fallback').textContent = 'Stop the synthesised voice';
+    say('Synthesised fallback. Real motion, obviously not a human voice.', 'warn');
+
+    // Long enough to see the orb settle into a rhythm, short enough not to nag.
+    setTimeout(endFallback, 9000);
+  });
+
+  function endFallback() {
+    if (!stopFallback) return;
+    stopFallback();                 // detaches and stops the source we started
+    stopFallback = null;
+    orb.state = 'idle';
+    $('fallback').textContent = 'Fallback: synthesised voice (no API key needed)';
+  }
+
+  // small UI plumbing
+
+  function setBusy(busy) {
+    $('speak').disabled = busy;
+    $('stop').disabled = !busy;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  // handy in the console
+  window.orb = orb;
+</script>
+
+</body>
+</html>

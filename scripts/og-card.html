@@ -1,0 +1,125 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Orb — social card generator</title>
+<!--
+  Renders the social card at 1200x630 from the REAL orb, so the image people see
+  in a link preview is the actual product rather than a mockup that will drift.
+
+  Serve the project, open /scripts/og-card.html, then either click Download or
+  read `window.__ogDataURL` from the console. Save the result as og.jpg at the
+  repo root; the meta tags in index.html point there.
+-->
+<style>
+  body { margin: 0; background: #14161c; color: #eef0f7;
+         font: 13px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
+         display: grid; place-items: center; min-height: 100vh; gap: 16px; padding: 24px }
+  #card { width: 1200px; height: 630px; transform: scale(.5); transform-origin: top center;
+          margin-bottom: -315px; border-radius: 10px; overflow: hidden }
+  #out { max-width: 600px; border-radius: 8px; border: 1px solid #333 }
+  button { padding: 9px 16px; border-radius: 9px; border: 1px solid #444; background: #1d2029;
+           color: #eef0f7; font: 12px ui-monospace, Menlo, monospace; cursor: pointer }
+  #status { color: #9aa1b6; font: 12px ui-monospace, Menlo, monospace }
+</style>
+
+<canvas id="card" width="1200" height="630"></canvas>
+<div id="status">rendering…</div>
+<button id="dl">download og.jpg</button>
+<img id="out" alt="">
+
+<script type="module">
+import { createOrb } from '../src/orb.js';
+
+const W = 1200, H = 630;
+const card = document.getElementById('card');
+const ctx = card.getContext('2d');
+
+// The orb renders into its own element, then we composite it onto the card.
+const stage = document.createElement('div');
+stage.style.cssText = 'position:fixed;left:-9999px;top:0';
+document.body.appendChild(stage);
+
+const ORB_PX = 420;
+const orb = createOrb(stage, {
+  seed: 'carl-sagan',
+  size: ORB_PX,
+  state: 'speaking',
+  background: '#0a0c14',
+  dpr: 'full',
+  animate: true,
+});
+
+// A steady non-zero level so the aurora and stars are lit in the still.
+orb.level = 0.55;
+
+function paint() {
+  // ground
+  const g = ctx.createLinearGradient(0, 0, W, H);
+  g.addColorStop(0, '#080a12');
+  g.addColorStop(0.55, '#0a0c16');
+  g.addColorStop(1, '#0d0f1c');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+
+  // two soft nebula washes, echoing the site background
+  for (const [x, y, r, col] of [
+    [180, -40, 620, 'rgba(60,90,180,0.28)'],
+    [1080, 40, 520, 'rgba(150,60,180,0.18)'],
+    [820, 640, 460, 'rgba(20,140,160,0.14)'],
+  ]) {
+    const rg = ctx.createRadialGradient(x, y, 0, x, y, r);
+    rg.addColorStop(0, col);
+    rg.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = rg;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // the orb, right of centre
+  const src = stage.querySelector('canvas');
+  if (src && src.width) {
+    const size = 400;
+    ctx.drawImage(src, 0, 0, src.width, src.height, 748, (H - size) / 2, size, size);
+  }
+
+  // wordmark
+  ctx.fillStyle = '#eef0f7';
+  ctx.font = '640 62px -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif';
+  ctx.textBaseline = 'alphabetic';
+  const x0 = 96;
+  ctx.fillStyle = '#58b0ff';
+  ctx.fillText('Orb', x0, 300);
+  ctx.fillStyle = '#eef0f7';
+  ctx.fillText('.js', x0 + ctx.measureText('Orb').width, 300);
+
+  ctx.fillStyle = '#6a7188';
+  ctx.font = '500 20px ui-monospace, Menlo, Consolas, monospace';
+  ctx.fillText('BY EARL BALAI', x0 + 4, 338);
+
+  ctx.fillStyle = '#9aa1b6';
+  ctx.font = '400 27px -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif';
+  ctx.fillText('The voice of an AI agent,', x0, 404);
+  ctx.fillText('given a body.', x0, 442);
+
+  ctx.fillStyle = '#4d5468';
+  ctx.font = '500 18px ui-monospace, Menlo, Consolas, monospace';
+  ctx.fillText('WEBGL1  ·  ZERO DEPENDENCIES  ·  ONE SCRIPT TAG', x0, 512);
+}
+
+const status = document.getElementById('status');
+const out = document.getElementById('out');
+
+// Give the orb a moment to compile, render and settle before the grab.
+setTimeout(() => {
+  paint();
+  const url = card.toDataURL('image/jpeg', 0.9);
+  window.__ogDataURL = url;
+  out.src = url;
+  status.textContent = `ready — ${(url.length / 1024).toFixed(0)} KB of base64`;
+}, 2500);
+
+document.getElementById('dl').addEventListener('click', () => {
+  const a = document.createElement('a');
+  a.href = window.__ogDataURL;
+  a.download = 'og.jpg';
+  a.click();
+});
+</script>

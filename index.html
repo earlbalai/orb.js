@@ -1,0 +1,1289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orb: the voice of an agent, given a body</title>
+<meta name="description" content="An audio-reactive orb for AI voice agents, by Earl Balai. A procedural galaxy sealed in glass, driven by your agent's real audio. One script tag, WebGL1, no build step, no dependencies.">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#07080c">
+<link rel="canonical" href="https://xyorb.vidome.app/">
+
+<!-- icons -->
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="apple-touch-icon" href="/favicon.svg">
+<link rel="mask-icon" href="/favicon.svg" color="#58b0ff">
+
+<!-- crawling -->
+<meta name="robots" content="index, follow, max-image-preview:large">
+<meta name="author" content="Earl Balai">
+
+<!-- open graph -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Orb by Earl Balai">
+<meta property="og:url" content="https://xyorb.vidome.app/">
+<meta property="og:title" content="Orb: the voice of an agent, given a body">
+<meta property="og:description" content="An audio-reactive orb for AI voice agents. A procedural galaxy sealed in glass, driven by real audio. One script tag, zero dependencies.">
+<meta property="og:image" content="https://xyorb.vidome.app/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="A glass sphere containing a procedural galaxy, glowing against a dark ground.">
+<meta property="og:locale" content="en_US">
+
+<!-- twitter / x -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Orb: the voice of an agent, given a body">
+<meta name="twitter:description" content="An audio-reactive orb for AI voice agents. A procedural galaxy sealed in glass, driven by real audio. One script tag, zero dependencies.">
+<meta name="twitter:image" content="https://xyorb.vidome.app/og.jpg">
+<meta name="twitter:image:alt" content="A glass sphere containing a procedural galaxy, glowing against a dark ground.">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Orb",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "Any browser with WebGL",
+  "url": "https://xyorb.vidome.app/",
+  "description": "An audio-reactive orb for AI voice agents. A procedural galaxy sealed in glass, driven by real audio. Zero dependencies, WebGL1, no build step.",
+  "softwareVersion": "1.0.0",
+  "license": "https://opensource.org/licenses/MIT",
+  "author": { "@type": "Organization", "name": "Earl Balai" },
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+}
+</script>
+<style>
+/* Tokens. Dark is the default, .light is the toggled page. Both are spelled out
+   in full so nothing inherits a colour from the host page. */
+:root {
+  --bg:      #07080c;
+  --bg-2:    #0b0d14;
+  --card:    rgba(255,255,255,0.038);
+  --card-2:  rgba(255,255,255,0.06);
+  --line:    rgba(255,255,255,0.10);
+  --line-2:  rgba(255,255,255,0.055);
+  --ink:     #eef0f7;
+  --dim:     #9aa1b6;
+  --faint:   #6a7188;
+  --accent:  #58b0ff;   /* pre-paint default, overwritten by the seed palette */
+  --good:    #6ad6a6;
+  --warn:    #f2b45c;
+  --sky-1:   rgba(60,90,180,0.20);
+  --sky-2:   rgba(150,60,180,0.14);
+  --sky-3:   rgba(20,140,160,0.10);
+  --shadow:  0 1px 2px rgba(0,0,0,0.4), 0 24px 60px -30px rgba(0,0,0,0.9);
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+  --r:  14px;
+  --r2: 20px;
+}
+body.light {
+  --bg:      #fbfbfd;
+  --bg-2:    #ffffff;
+  --card:    rgba(12,16,32,0.028);
+  --card-2:  rgba(12,16,32,0.045);
+  --line:    rgba(12,16,32,0.12);
+  --line-2:  rgba(12,16,32,0.075);
+  --ink:     #13151d;
+  --dim:     #565d70;
+  --faint:   #868da1;
+  --good:    #1c9c6c;
+  --warn:    #a8702a;
+  --sky-1:   rgba(60,90,180,0.10);
+  --sky-2:   rgba(150,60,180,0.07);
+  --sky-3:   rgba(20,140,160,0.06);
+  --shadow:  0 1px 2px rgba(16,20,40,0.06), 0 24px 60px -34px rgba(16,20,40,0.35);
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.6;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  transition: background 300ms ease, color 300ms ease;
+}
+::selection { background: color-mix(in srgb, var(--accent) 32%, transparent); color: var(--ink); }
+
+/* faint nebula, so the page reads as space and not a slab */
+.sky {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background:
+    radial-gradient(1100px 720px at 18% 4%,  var(--sky-1), transparent 62%),
+    radial-gradient(900px 640px at 86% 68%, var(--sky-2), transparent 60%),
+    radial-gradient(760px 520px at 52% 34%, var(--sky-3), transparent 66%);
+}
+
+.wrap { position: relative; z-index: 1; width: 100%; max-width: 1140px; margin: 0 auto; padding: 0 22px; }
+
+/* type */
+h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.028em; }
+h1 { font-size: clamp(36px, 7.2vw, 66px); line-height: 1.02; }
+h2 { font-size: clamp(24px, 3.6vw, 34px); line-height: 1.14; }
+h3 { font-size: 15px; letter-spacing: -0.012em; }
+p  { margin: 0; }
+a  { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.eyebrow {
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.2em;
+  text-transform: uppercase; color: var(--faint);
+}
+.lede { color: var(--dim); font-size: clamp(15px, 1.9vw, 18px); max-width: 62ch; }
+.sub  { color: var(--dim); max-width: 66ch; }
+.small { font-size: 13px; color: var(--faint); }
+code, .mono { font-family: var(--mono); font-size: 0.92em; }
+
+section { padding: 92px 0 0; }
+.sec-head { display: grid; gap: 12px; margin-bottom: 30px; max-width: 70ch; }
+
+/* chrome */
+.topbar {
+  position: sticky; top: 0; z-index: 40;
+  backdrop-filter: saturate(140%) blur(14px);
+  -webkit-backdrop-filter: saturate(140%) blur(14px);
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
+  border-bottom: 1px solid var(--line-2);
+}
+.topbar .wrap { display: flex; align-items: center; gap: 14px; height: 60px; }
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+/* Two different type sizes, so these align on the baseline. Centring them makes
+   the small mono float above the wordmark. */
+.wordmark { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.brand .mark { font-size: 17px; font-weight: 640; letter-spacing: -0.03em; white-space: nowrap; }
+.brand .mark b { color: var(--accent); font-weight: 640; }
+.brand .by {
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.13em;
+  text-transform: uppercase; color: var(--faint); white-space: nowrap;
+}
+.spacer { flex: 1 1 auto; }
+.pill {
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.1em; color: var(--faint);
+  border: 1px solid var(--line-2); border-radius: 99px; padding: 3px 10px; white-space: nowrap;
+}
+@media (max-width: 620px) { .brand .by, .pill.hide-sm { display: none; } }
+
+/* cards */
+.card {
+  border: 1px solid var(--line-2); border-radius: var(--r2);
+  background: var(--card);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+}
+
+/* hero */
+.hero { padding-top: 74px; text-align: center; display: grid; gap: 20px; justify-items: center; }
+.hero h1 span { color: var(--accent); }
+.hero .lede { text-align: center; }
+
+.stage {
+  position: relative; margin-top: 34px; border-radius: 28px; overflow: hidden;
+  border: 1px solid var(--line-2); box-shadow: var(--shadow);
+  background:
+    radial-gradient(120% 90% at 50% 0%, var(--card-2), transparent 70%),
+    var(--card);
+  display: grid; place-items: center;
+  min-height: min(66vh, 520px); padding: 44px 18px 58px;
+}
+.stage::before {
+  content: ""; position: absolute; left: 50%; top: 46%; transform: translate(-50%,-50%);
+  width: min(760px, 130%); aspect-ratio: 1; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(closest-side, var(--glow, #7cc8ff), transparent 68%);
+  opacity: 0.16; transition: background 420ms ease;
+}
+.stage-mount { position: relative; z-index: 1; display: grid; place-items: center; }
+.meta {
+  position: absolute; left: 0; right: 0; bottom: 14px; z-index: 2;
+  display: flex; gap: 6px 20px; flex-wrap: wrap; justify-content: center;
+  padding: 0 18px;
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.04em; color: var(--faint);
+}
+.meta b { color: var(--dim); font-weight: 500; }
+
+/* the four states */
+.states {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+  margin-top: 14px;
+}
+.state-btn {
+  appearance: none; cursor: pointer; text-align: left;
+  padding: 13px 14px 12px; border-radius: var(--r);
+  border: 1px solid var(--line-2); background: var(--card); color: var(--ink);
+  display: grid; gap: 3px; min-width: 0;
+  transition: border-color 160ms, background 160ms, transform 160ms;
+}
+.state-btn:hover { border-color: var(--line); transform: translateY(-1px); }
+.state-btn .n {
+  font-family: var(--mono); font-size: 12px; letter-spacing: 0.02em;
+  display: flex; align-items: center; gap: 7px;
+}
+.state-btn .n::before {
+  content: ""; width: 6px; height: 6px; border-radius: 50%; flex: 0 0 auto;
+  background: var(--faint); transition: background 220ms, box-shadow 220ms;
+}
+.state-btn .d { font-size: 11.5px; color: var(--faint); line-height: 1.35; }
+.state-btn[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
+}
+.state-btn[aria-pressed="true"] .n { color: var(--accent); }
+.state-btn[aria-pressed="true"] .n::before {
+  background: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+@media (max-width: 720px) {
+  .states { grid-template-columns: repeat(2, 1fr); }
+  .state-btn .d { display: none; }
+  .state-btn { padding: 11px 12px; }
+}
+
+/* controls */
+.controls {
+  margin-top: 12px; padding: 18px;
+  display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 18px 20px;
+  align-items: start;          /* do not stretch cells to the tallest column */
+}
+.controls .wide { grid-column: 1 / -1; }
+@media (max-width: 900px) { .controls { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+@media (max-width: 560px) { .controls { grid-template-columns: 1fr; } }
+
+.field { display: grid; gap: 7px; min-width: 0; align-content: start; }
+.field > label {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--faint); display: flex; justify-content: space-between; gap: 10px; align-items: baseline;
+}
+.field > label .v { text-transform: none; letter-spacing: 0; color: var(--dim); }
+
+input[type=text], select {
+  width: 100%; padding: 9px 11px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--card-2); color: var(--ink);
+  font-family: var(--mono); font-size: 12.5px; outline: none; min-width: 0;
+}
+input[type=text]:focus-visible, select:focus-visible { border-color: var(--accent); }
+select { cursor: pointer; }
+body:not(.light) select option { background: #0f121b; color: #eef0f7; }
+input[type=range] { width: 100%; accent-color: var(--accent); cursor: pointer; margin: 6px 0 0; }
+
+.row { display: flex; gap: 8px; flex-wrap: wrap; }
+button {
+  padding: 8px 13px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--card-2); color: var(--ink); cursor: pointer;
+  font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.02em;
+  transition: border-color 150ms, color 150ms, background 150ms;
+}
+button:hover { border-color: var(--accent); color: var(--accent); }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+button.ghost { background: transparent; }
+
+.levelbar {
+  height: 5px; border-radius: 3px; background: var(--card-2); overflow: hidden;
+  border: 1px solid var(--line-2); margin-top: 8px;
+}
+.levelbar > i { display: block; height: 100%; width: 0%; background: var(--accent); transition: width 70ms linear; }
+
+.msg {
+  grid-column: 1 / -1; display: none; padding: 11px 14px; border-radius: 12px;
+  border: 1px solid var(--line-2); background: var(--card-2);
+  color: var(--dim); font-size: 12.5px;
+}
+.msg.show { display: block; }
+
+/* glass proof */
+.proof { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+@media (max-width: 760px) { .proof { grid-template-columns: 1fr; } }
+.proof-card {
+  border-radius: var(--r2); padding: 34px 22px 20px; display: grid; gap: 18px;
+  justify-items: center; text-align: center; box-shadow: var(--shadow);
+}
+.proof-card.on-light { background: #ffffff; border: 1px solid rgba(12,16,32,0.10); color: #13151d; }
+.proof-card.on-dark  { background: #06070c; border: 1px solid rgba(255,255,255,0.10); color: #eef0f7; }
+.proof-card .tag {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+  opacity: 0.55;
+}
+.proof-card .cap { font-size: 12.5px; opacity: 0.6; max-width: 34ch; line-height: 1.5; }
+
+.ramp {
+  margin-top: 18px; display: grid; grid-template-columns: repeat(7, 1fr);
+  border-radius: var(--r); overflow: hidden; border: 1px solid var(--line-2);
+}
+.ramp .cell { display: grid; place-items: center; padding: 20px 4px; }
+@media (max-width: 620px) {
+  .ramp { grid-template-columns: repeat(4, 1fr); }
+  .ramp .cell:nth-child(n+5) { display: none; }
+}
+
+/* roster */
+.roster {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(136px, 1fr));
+  gap: 4px; padding: 12px;
+}
+.agent {
+  display: grid; grid-template-columns: auto minmax(0,1fr); align-items: center; gap: 11px;
+  padding: 9px 10px; border-radius: 12px; min-width: 0;
+  transition: background 140ms;
+}
+.agent:hover { background: var(--card-2); }
+.agent .who { font-size: 12.5px; font-weight: 550; letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent .st { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); }
+
+/* embed */
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.snip { position: relative; }
+.snip pre {
+  margin: 0; padding: 22px 22px 22px; border-radius: var(--r2); overflow-x: auto;
+  background: var(--card); border: 1px solid var(--line-2);
+  font-family: var(--mono); font-size: 12.5px; line-height: 1.72; color: var(--dim);
+  -webkit-overflow-scrolling: touch;
+}
+.snip pre code { font-size: inherit; }
+.snip .copy { position: absolute; top: 12px; right: 12px; z-index: 2; }
+.snip .snip-bar .copy { position: static; }
+.k { color: #c792ea; } .s { color: #8fd97b; } .c { color: var(--faint); font-style: italic; }
+.f { color: var(--accent); } .t { color: #f0a875; }
+body.light .k { color: #8b3fbd; } body.light .s { color: #2c7a3c; } body.light .t { color: #b25a1f; }
+
+/* how */
+.how { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1px;
+       background: var(--line-2); border: 1px solid var(--line-2); border-radius: var(--r2); overflow: hidden; }
+.how .item { background: var(--bg); padding: 22px 20px; display: grid; gap: 8px; align-content: start; }
+.how .item .n { font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em; color: var(--faint); }
+.how .item p { font-size: 13.5px; color: var(--dim); line-height: 1.6; }
+
+footer { margin-top: 96px; padding: 30px 0 64px; border-top: 1px solid var(--line-2); }
+footer .in { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+
+#boot { display: none; max-width: 720px; margin: 90px auto; }
+#boot.show { display: block; }
+#boot pre { margin-top: 12px; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition-duration: 1ms !important; }
+}
+</style>
+</head>
+<body>
+<div class="sky"></div>
+
+<div id="boot" class="wrap">
+  <div class="card" style="padding:26px">
+    <h2 style="margin-bottom:12px">Orb needs a server.</h2>
+    <p class="sub"><code>src/orb.js</code> is an ES module, and a <code>file://</code> document has an opaque
+    origin. Browsers fetch <code>&lt;script type="module"&gt;</code> with CORS, which an opaque origin can never
+    satisfy, so the import is refused before any of this page runs. Nothing in the library can change that.</p>
+    <p class="sub" style="margin-top:10px">Any static server from this folder will do:</p>
+    <div class="snip"><pre><code>python -m http.server 8000     <span class="c"># or:  npx serve .</span></code></pre></div>
+  </div>
+</div>
+
+<div id="app" hidden>
+
+<!-- topbar -->
+<div class="topbar">
+  <div class="wrap">
+    <div class="brand">
+      <div id="logo-orb" aria-hidden="true"></div>
+      <span class="wordmark">
+        <span class="mark"><b>Orb</b>.js</span>
+        <span class="by">by Earl Balai</span>
+      </span>
+    </div>
+    <div class="spacer"></div>
+    <a class="pill hide-sm" href="./examples/" title="examples" style="text-decoration:none">v1.0.0 · zero deps</a>
+    <button id="theme-btn" aria-pressed="false" aria-label="Toggle light and dark page">dark</button>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <!-- hero -->
+  <header class="hero">
+    <p class="eyebrow">WebGL1 · zero dependencies · no build step</p>
+    <h1>The voice of an agent,<br><span>given a body.</span></h1>
+    <p class="lede">A procedural galaxy sealed inside a glass sphere. The seed decides what it looks like,
+      your agent's audio decides how it moves. No geometry anywhere in it: one four-vertex quad, and the
+      sphere is solved analytically per fragment.</p>
+  </header>
+
+  <div class="stage" id="stage">
+    <div class="stage-mount" id="hero-mount"></div>
+    <div class="meta">
+      <span>seed <b id="m-seed">—</b></span>
+      <span>hash <b id="m-hash">—</b></span>
+      <span>hue <b id="m-hue">—</b></span>
+      <span>archetype <b id="m-arch">—</b></span>
+      <span>buffer <b id="m-px">—</b></span>
+      <span>state <b id="m-state">—</b></span>
+    </div>
+  </div>
+
+  <!-- speaking previews. Pre-generated speech served from this origin, so the
+       analyser reads a real waveform instead of a faked envelope. -->
+  <div class="phrases" id="hero-phrases" role="group" aria-label="Speaking previews">
+    <span class="phrases-label" id="hero-phrases-label">hear it speak</span>
+    <div class="phrase-chips" id="hero-phrase-chips"></div>
+  </div>
+
+  <!-- the four states -->
+  <div class="states" id="states" role="group" aria-label="Agent state">
+    <button class="state-btn" data-state="idle" aria-pressed="true">
+      <span class="n">idle</span><span class="d">slow drift, dim aurora, palette at rest</span>
+    </button>
+    <button class="state-btn" data-state="listening" aria-pressed="false">
+      <span class="n">listening</span><span class="d">cooler cast, and the rim tracks the person talking</span>
+    </button>
+    <button class="state-btn" data-state="thinking" aria-pressed="false">
+      <span class="n">thinking</span><span class="d">no audio, spin triples, a bead orbits</span>
+    </button>
+    <button class="state-btn" data-state="speaking" aria-pressed="false">
+      <span class="n">speaking</span><span class="d">full reactivity, the aurora blooms on its own voice</span>
+    </button>
+  </div>
+
+  <!-- controls -->
+  <div class="card controls">
+    <div class="field">
+      <label for="c-seed">seed <span class="v">identity</span></label>
+      <input type="text" id="c-seed" value="carl-sagan" spellcheck="false" autocomplete="off">
+      <div class="row" style="margin-top:2px">
+        <button id="c-shuffle" class="ghost">shuffle</button>
+        <button id="c-copy" class="ghost">copy config</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="c-arch">archetype</label>
+      <select id="c-arch">
+        <option value="auto">auto (from the seed)</option>
+        <option value="spiral">spiral (milky-way band)</option>
+        <option value="nebula">nebula (vivid cloud)</option>
+        <option value="core">core (blazing bulge)</option>
+        <option value="deep">deep (sparse void)</option>
+      </select>
+      <label for="c-size" style="margin-top:10px">size <span class="v" id="c-size-v">340 px</span></label>
+      <input type="range" id="c-size" min="80" max="440" step="2" value="340">
+    </div>
+
+    <div class="field">
+      <label for="c-lens">chromatic lens <span class="v" id="c-lens-v">auto</span></label>
+      <input type="range" id="c-lens" min="-1" max="90" step="1" value="-1">
+      <label for="c-hue" style="margin-top:10px">palette <span class="v" id="c-hue-v">auto</span></label>
+      <input type="range" id="c-hue" min="-1" max="359" step="1" value="-1">
+    </div>
+
+    <div class="field">
+      <label>voice <span class="v" id="c-src-v">synthetic</span></label>
+      <div class="row">
+        <button data-src="speech" aria-pressed="false">speak</button>
+        <button data-src="microphone" aria-pressed="false">mic</button>
+        <button data-src="synthetic" aria-pressed="true">quiet</button>
+      </div>
+      <div class="levelbar" aria-hidden="true"><i id="c-level"></i></div>
+      <p class="small" style="margin-top:2px">speak is audible synthesis, through the same analyser your agent's audio would use.</p>
+    </div>
+
+    <div class="msg" id="c-msg"></div>
+  </div>
+
+  <!-- glass on both grounds -->
+  <section>
+    <div class="sec-head">
+      <p class="eyebrow">real premultiplied alpha</p>
+      <h2>It really is transparent.</h2>
+      <p class="sub">The orb composites with per-pixel alpha and transmits whatever sits behind it, so the same
+        seed lands correctly on a white card and a black one. No halo, no grey box, no background baked into
+        the texture. Flip the page and both cards below keep their own colour.</p>
+    </div>
+
+    <div class="proof">
+      <div class="proof-card on-light">
+        <span class="tag">on #FFFFFF</span>
+        <div id="proof-light"></div>
+        <p class="cap">Rim lensing goes dark against the page, and the far wall of the sphere shows through.</p>
+      </div>
+      <div class="proof-card on-dark">
+        <span class="tag">on #06070C</span>
+        <div id="proof-dark"></div>
+        <p class="cap">Same seed, same frame. Only the ground behind the glass changed.</p>
+      </div>
+    </div>
+
+    <div class="ramp" id="ramp" aria-hidden="true"></div>
+    <p class="small" style="margin-top:10px">One seed on seven grounds. <code>background: 'auto'</code> walks
+      up to the nearest opaque ancestor, so an orb dropped into your UI transmits your UI.</p>
+  </section>
+
+  <!-- roster -->
+  <section>
+    <div class="sec-head">
+      <p class="eyebrow">deterministic identity</p>
+      <h2>Every agent, its own sky.</h2>
+      <p class="sub">FNV-1a over the seed string picks hue, archetype, structural phase, meteor cadence and
+        starting spin. Same string, same orb, on any device or session. Small orbs share an instanced atlas,
+        so this whole roster is one draw call.</p>
+    </div>
+    <div class="card roster" id="roster"></div>
+  </section>
+
+  <!-- embed -->
+  <section>
+    <div class="sec-head">
+      <p class="eyebrow">install</p>
+      <h2>Drop it into anything.</h2>
+      <p class="sub">Two ways in. Point at the CDN and you are done, or download the file and serve it
+        yourself. Both give you the same thing: one ES module, no dependencies, no build step.</p>
+    </div>
+
+    <div class="install">
+      <div class="install-card">
+        <div class="install-head">
+          <span class="install-n">01</span>
+          <h3>Use the CDN</h3>
+          <span class="pill-sm">nothing to install</span>
+        </div>
+        <p>Served by jsDelivr straight from the repo, pinned to a release tag, with open CORS.
+          Not my bandwidth, and it does not break if this site goes away.</p>
+        <div class="urlbar">
+          <code id="embed-url">https://cdn.jsdelivr.net/gh/earlbalai/orb.js@v1.0.0/src/element.js</code>
+          <button class="copy ghost" data-copy="https://cdn.jsdelivr.net/gh/earlbalai/orb.js@v1.0.0/src/element.js">copy</button>
+        </div>
+        <p class="install-note">Pin the tag. <code>@main</code> would ship your users whatever I pushed last.</p>
+      </div>
+
+      <div class="install-card">
+        <div class="install-head">
+          <span class="install-n">02</span>
+          <h3>Self-host</h3>
+          <span class="pill-sm">MIT</span>
+        </div>
+        <p>Grab the file, drop it next to your page, serve it over http(s). That is the whole install.
+          Keep the licence header and you are square.</p>
+        <div class="dl-row">
+          <a class="dl" href="./src/element.js" download>
+            <b>element.js</b><span>the <code>&lt;orb-js&gt;</code> tag · imports orb.js</span>
+          </a>
+          <a class="dl" href="./src/orb.js" download>
+            <b>orb.js</b><span>the library on its own</span>
+          </a>
+          <a class="dl" href="./src/orb.global.js" download>
+            <b>orb.global.js</b><span>everything in one classic script</span>
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <div class="tabs" id="tabs" role="tablist" aria-label="Embed surface">
+      <button role="tab" data-tab="ce" aria-pressed="true">&lt;orb-js&gt;</button>
+      <button role="tab" data-tab="esm" aria-pressed="false">script / ESM</button>
+      <button role="tab" data-tab="react" aria-pressed="false">React</button>
+      <button role="tab" data-tab="global" aria-pressed="false">no-code / GTM</button>
+    </div>
+
+    <div class="snip" data-panel="ce">
+      <div class="snip-bar"><span class="snip-f">index.html</span><button class="copy ghost">copy</button></div>
+<pre><code><span class="t">&lt;script</span> <span class="f">type</span>=<span class="s">"module"</span> <span class="f">src</span>=<span class="s">"https://cdn.jsdelivr.net/gh/earlbalai/orb.js@v1.0.0/src/element.js"</span><span class="t">&gt;&lt;/script&gt;</span>
+
+<span class="t">&lt;orb-js</span> <span class="f">seed</span>=<span class="s">"agent-42"</span> <span class="f">size</span>=<span class="s">"320"</span> <span class="f">state</span>=<span class="s">"speaking"</span><span class="t">&gt;&lt;/orb-js&gt;</span>
+
+<span class="t">&lt;script</span> <span class="f">type</span>=<span class="s">"module"</span><span class="t">&gt;</span>
+  <span class="k">const</span> el = document.<span class="f">querySelector</span>(<span class="s">'orb-js'</span>);
+
+  el.<span class="f">listenTo</span>(agentStream);   <span class="c">// MediaStream, &lt;audio&gt;, AnalyserNode, 'microphone'</span>
+  el.<span class="f">setAttribute</span>(<span class="s">'state'</span>, <span class="s">'listening'</span>);
+<span class="t">&lt;/script&gt;</span></code></pre>
+    </div>
+
+    <div class="snip" data-panel="esm" hidden>
+      <div class="snip-bar"><span class="snip-f">app.js</span><button class="copy ghost">copy</button></div>
+<pre><code><span class="k">import</span> { createOrb } <span class="k">from</span> <span class="s">'https://cdn.jsdelivr.net/gh/earlbalai/orb.js@v1.0.0/src/orb.js'</span>;
+
+<span class="k">const</span> orb = <span class="f">createOrb</span>(document.<span class="f">getElementById</span>(<span class="s">'orb'</span>), {
+  seed: <span class="s">'agent-42'</span>,      <span class="c">// hue, archetype, structure, spin all derive from this</span>
+  size: <span class="s">320</span>,             <span class="c">// css px, square</span>
+  state: <span class="s">'idle'</span>,          <span class="c">// idle | listening | thinking | speaking</span>
+  background: <span class="s">'auto'</span>,    <span class="c">// transmits whatever is behind it</span>
+});
+
+<span class="c">// anything your voice stack hands you</span>
+<span class="k">const</span> stop = orb.<span class="f">listenTo</span>(agentStream);
+
+orb.state = <span class="s">'speaking'</span>;   <span class="c">// crossfades over ~350ms</span>
+
+<span class="f">stop</span>();                   <span class="c">// detach the audio</span>
+orb.<span class="f">destroy</span>();            <span class="c">// and everything else</span></code></pre>
+    </div>
+
+    <div class="snip" data-panel="react" hidden>
+      <div class="snip-bar"><span class="snip-f">Orb.jsx</span><button class="copy ghost">copy</button></div>
+<pre><code><span class="c">// bundlers cannot resolve a url import, so load it at runtime</span>
+<span class="k">import</span> { useEffect, useRef } <span class="k">from</span> <span class="s">'react'</span>;
+
+<span class="k">const</span> SRC = <span class="s">'https://cdn.jsdelivr.net/gh/earlbalai/orb.js@v1.0.0/src/orb.js'</span>;
+
+<span class="k">export function</span> <span class="f">Orb</span>({ seed, size = <span class="s">320</span>, state = <span class="s">'idle'</span>, audio }) {
+  <span class="k">const</span> host = <span class="f">useRef</span>(<span class="k">null</span>);
+  <span class="k">const</span> orb  = <span class="f">useRef</span>(<span class="k">null</span>);
+
+  <span class="f">useEffect</span>(() =&gt; {
+    <span class="k">let</span> dead = <span class="k">false</span>;
+    <span class="f">import</span>(SRC).<span class="f">then</span>(({ Orb }) =&gt; {
+      <span class="k">if</span> (!dead) orb.current = Orb.<span class="f">mount</span>(host.current, { seed, size, state });
+    });
+    <span class="k">return</span> () =&gt; { dead = <span class="k">true</span>; orb.current?.<span class="f">destroy</span>(); orb.current = <span class="k">null</span>; };
+  }, []);
+
+  <span class="f">useEffect</span>(() =&gt; { orb.current?.<span class="f">update</span>({ seed, size }); }, [seed, size]);
+  <span class="f">useEffect</span>(() =&gt; { orb.current?.<span class="f">setState</span>(state); }, [state]);
+  <span class="f">useEffect</span>(() =&gt; audio ? orb.current?.<span class="f">listenTo</span>(audio) : undefined, [audio]);
+
+  <span class="k">return</span> <span class="t">&lt;div</span> <span class="f">ref</span>={host} <span class="t">/&gt;</span>;
+}</code></pre>
+    </div>
+
+    <div class="snip" data-panel="global" hidden>
+      <div class="snip-bar"><span class="snip-f">no modules — Tag Manager, Webflow, Wordpress</span><button class="copy ghost">copy</button></div>
+<pre><code><span class="t">&lt;script</span> <span class="f">src</span>=<span class="s">"https://cdn.jsdelivr.net/gh/earlbalai/orb.js@v1.0.0/src/orb.global.js"</span><span class="t">&gt;&lt;/script&gt;</span>
+
+<span class="t">&lt;orb-js</span> <span class="f">seed</span>=<span class="s">"agent-42"</span> <span class="f">size</span>=<span class="s">"320"</span><span class="t">&gt;&lt;/orb-js&gt;</span>
+
+<span class="c">&lt;!-- or build it by hand off the global --&gt;</span>
+<span class="t">&lt;script&gt;</span>
+  <span class="k">var</span> orb = Orb.<span class="f">createOrb</span>(document.<span class="f">getElementById</span>(<span class="s">'orb'</span>), {
+    seed: <span class="s">'agent-42'</span>, size: <span class="s">320</span>
+  });
+<span class="t">&lt;/script&gt;</span></code></pre>
+    </div>
+  </section>
+
+  <!-- how -->
+  <section>
+    <div class="sec-head">
+      <p class="eyebrow">the technique</p>
+      <h2>Six ideas, one fragment shader.</h2>
+    </div>
+    <div class="how">
+      <div class="item">
+        <div class="n">01</div><h3>Analytic sphere</h3>
+        <p>No mesh at all. <code>z = sqrt(1 - r²)</code> over a four-vertex quad gives the near hemisphere
+          exactly, and the normal comes with it, which is everything lighting, fresnel and refraction need.</p>
+      </div>
+      <div class="item">
+        <div class="n">02</div><h3>Dual-layer refraction</h3>
+        <p>The view ray refracts into the glass, and on a unit sphere the chord to the far wall is exactly
+          <code>-2·dot(N, R)</code>. So the galaxy gets sampled a second time there for the price of a dot
+          product. Without that back layer it reads as a disc.</p>
+      </div>
+      <div class="item">
+        <div class="n">03</div><h3>Chromatic rim lens</h3>
+        <p>Near the silhouette the shading function runs three times over, once per channel, at displaced
+          coordinates. The falloff is hand-expanded from <code>(e²ˣ−1)/(e²ˣ+1)</code> since GLSL ES 1.00 has
+          no <code>tanh</code>.</p>
+      </div>
+      <div class="item">
+        <div class="n">04</div><h3>Real alpha</h3>
+        <p>Premultiplied output plus a page-colour uniform, so the sphere transmits its ground instead of
+          carrying one. CSS cuts the silhouette with a half-pixel radial mask. The shader renders past
+          <code>r = 1</code> on purpose, so the lens always has real pixels to bend.</p>
+      </div>
+      <div class="item">
+        <div class="n">05</div><h3>Asymmetric envelopes</h3>
+        <p>RMS feeds two envelopes: fast (40&nbsp;ms attack / 180&nbsp;ms release) drives motion, slow
+          (110/300&nbsp;ms) drives colour. The positive derivative of the fast one kicks a spin integrator, so
+          a consonant makes it lurch and a sentence makes it swim.</p>
+      </div>
+      <div class="item">
+        <div class="n">06</div><h3>One crossfaded axis</h3>
+        <p>The four states are one smoothed scalar, ordered the way a conversation actually runs. Ordinary
+          transitions are between neighbours, so the orb never passes through a third look on the way.</p>
+      </div>
+    </div>
+  </section>
+
+
+  <footer>
+    <div class="in">
+      <div>
+        <div class="mark" style="font-size:15px;font-weight:640;letter-spacing:-0.03em"><b style="color:var(--accent)">Orb</b>.js</div>
+        <p class="small">MIT © Earl Balai · v1.0.0 · zero dependencies</p>
+        <p class="small" style="margin-top:6px">
+          <a href="https://github.com/earlbalai/orb.js" rel="noopener">Source on GitHub</a>
+          · <a href="https://github.com/earlbalai/orb.js/blob/main/LICENSE" rel="noopener">MIT licence</a>
+        </p>
+        <p class="small" style="margin-top:6px;max-width:52ch">Rendering approach inspired by the agent orb on
+          <a href="https://x.ai" rel="noopener">x.ai</a>. Independent implementation; not affiliated with xAI.</p>
+      </div>
+    </div>
+  </footer>
+</div>
+</div>
+
+<style>
+  /* install */
+  .install {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+    gap: 14px; margin-bottom: 26px;
+  }
+  .install-card {
+    padding: 20px 22px 22px; border-radius: var(--r2);
+    border: 1px solid var(--line-2); background: var(--card);
+    display: flex; flex-direction: column; gap: 11px;
+  }
+  .install-head { display: flex; align-items: center; gap: 10px }
+  .install-head h3 { margin: 0; font-size: 15px; letter-spacing: -0.015em; font-weight: 620 }
+  .install-n {
+    font: 10px/1 var(--mono); letter-spacing: 0.12em; color: var(--faint);
+    border: 1px solid var(--line); border-radius: 6px; padding: 5px 6px;
+  }
+  .pill-sm {
+    margin-left: auto; font: 10px/1 var(--mono); letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--faint);
+    border: 1px solid var(--line-2); border-radius: 999px; padding: 5px 9px;
+  }
+  .install-card > p { margin: 0; font-size: 13px; color: var(--dim); line-height: 1.6 }
+  .install-note { font-size: 12px !important; color: var(--faint) !important }
+  .install-note code { font-family: var(--mono); font-size: 11.5px; color: var(--dim) }
+
+  .urlbar {
+    display: flex; align-items: center; gap: 10px; margin-top: auto;
+    padding: 11px 12px; border-radius: 11px;
+    border: 1px solid var(--line); background: var(--bg-2);
+  }
+  .urlbar code {
+    font: 12px var(--mono); color: var(--accent); flex: 1; min-width: 0;
+    overflow-x: auto; white-space: nowrap; scrollbar-width: none;
+  }
+  .urlbar code::-webkit-scrollbar { display: none }
+
+  .dl-row { display: flex; flex-direction: column; gap: 7px; margin-top: auto }
+  .dl {
+    display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+    padding: 10px 13px; border-radius: 11px; text-decoration: none;
+    border: 1px solid var(--line-2); background: var(--bg-2); color: inherit;
+    transition: border-color .16s ease, background .16s ease, transform .16s ease;
+  }
+  .dl:hover { border-color: var(--accent); background: var(--card-2); transform: translateY(-1px) }
+  .dl b { font: 12.5px var(--mono); color: var(--ink); font-weight: 500 }
+  .dl span { font-size: 11.5px; color: var(--faint) }
+  .dl span code { font-family: var(--mono); font-size: 11px }
+  .dl::after { content: "\2193"; margin-left: auto; color: var(--faint); font-size: 13px }
+
+  /* code panel header */
+  .snip-bar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 12px 9px 16px; border: 1px solid var(--line-2); border-bottom: 0;
+    border-radius: var(--r2) var(--r2) 0 0; background: var(--card-2);
+  }
+  .snip-f { font: 11px var(--mono); color: var(--faint) }
+  .snip-bar .copy { margin-left: auto; position: static }
+  .snip-bar + pre { border-radius: 0 0 var(--r2) var(--r2) !important }
+
+  .phrases { margin: 20px auto 0; max-width: 100%; text-align: center }
+  .phrases-label {
+    display: block; font: 10.5px/1 var(--mono); letter-spacing: 0.09em;
+    text-transform: uppercase; color: var(--faint); margin-bottom: 11px;
+  }
+  /* One non-wrapping strip. Wrapping changed the row height as chips reflowed,
+     which shoved everything below it around. */
+  .phrase-chips {
+    display: flex; gap: 8px; flex-wrap: nowrap;
+    overflow-x: auto; overscroll-behavior-x: contain;
+    padding: 2px 4px 6px; margin: 0 -4px;
+    scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 18px, #000 calc(100% - 18px), transparent);
+            mask-image: linear-gradient(90deg, transparent, #000 18px, #000 calc(100% - 18px), transparent);
+  }
+  .phrase-chips::-webkit-scrollbar { display: none }
+  .chip { flex: none }
+  .chip {
+    --p: 0;                                  /* playback progress, 0..1 */
+    position: relative; overflow: hidden; isolation: isolate;
+    display: inline-flex; align-items: center; gap: 8px;
+    font: 12px var(--sans); color: var(--dim);
+    background: var(--card); border: 1px solid var(--line-2);
+    border-radius: 999px; padding: 7px 14px 7px 11px; cursor: pointer;
+    transition: color .16s ease, border-color .16s ease, background .16s ease, transform .16s ease;
+  }
+  /* progress sweep, painted behind the label */
+  .chip::before {
+    content: ""; position: absolute; inset: 0; z-index: -1; transform-origin: left;
+    transform: scaleX(var(--p)); background: rgba(124,200,255,0.16);
+    transition: transform .12s linear;
+  }
+  .chip:hover:not(:disabled) { color: var(--ink); border-color: var(--line); transform: translateY(-1px) }
+  .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+  .chip[aria-pressed="true"] { color: var(--accent); border-color: var(--accent) }
+  .chip:disabled { opacity: .4; cursor: default }
+
+  /* play triangle, morphs to a stop square while playing */
+  .chip-ico {
+    width: 13px; height: 13px; flex: none; border-radius: 3px; position: relative;
+    background: currentColor; opacity: .55;
+    clip-path: polygon(22% 8%, 22% 92%, 92% 50%);
+    transition: clip-path .2s cubic-bezier(.4,0,.2,1), opacity .16s ease;
+  }
+  .chip:hover .chip-ico { opacity: .95 }
+  .chip[aria-pressed="true"] .chip-ico {
+    opacity: 1; clip-path: polygon(20% 20%, 20% 80%, 80% 80%, 80% 20%);
+  }
+  /* tick showing which state the line illustrates */
+  .chip-dot { width: 5px; height: 5px; border-radius: 50%; flex: none; opacity: .75 }
+  .chip-dot[data-state="idle"]      { background: var(--faint) }
+  .chip-dot[data-state="listening"] { background: var(--accent) }
+  .chip-dot[data-state="thinking"]  { background: var(--warn) }
+  .chip-dot[data-state="speaking"]  { background: var(--good) }
+
+  .ex-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px; margin-top:16px }
+  .ex { display:flex; flex-direction:column; gap:5px; padding:14px 16px; border-radius:12px;
+        border:1px solid var(--line); background:var(--panel); text-decoration:none; color:inherit;
+        transition:border-color .18s ease, transform .18s ease }
+  .ex:hover { border-color:var(--accent); transform:translateY(-2px) }
+  .ex b { font-size:13px; letter-spacing:-0.01em }
+  .ex span { font-size:12px; color:var(--dim); line-height:1.5 }
+</style>
+
+<script type="module">
+import {
+  createOrb, OrbAudioSource, identityForSeed, isSupported, resumeAudio,
+  ARCHETYPES, STATES,
+} from './src/orb.js';
+import { PHRASES } from './src/phrases.js';
+import { playPhrase, phrasesAvailable, isNotGenerated } from './src/phrase-player.js';
+
+const $ = (id) => document.getElementById(id);
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+$('app').hidden = false;
+
+/* page state */
+
+const ui = {
+  seed: 'carl-sagan',
+  archetype: 'auto',
+  hue: -1,        // -1 = seed-derived
+  size: 340,
+  lens: -1,       // -1 = auto
+  state: 'idle',
+};
+
+const extras = [];   // non-hero orbs, so a theme flip can re-read the page
+
+/* hero */
+
+const hero = createOrb($('hero-mount'), {
+  seed: ui.seed, size: ui.size, state: ui.state,
+  background: 'auto', ariaLabel: 'A live Orb showing the current agent state',
+});
+
+// The stage is fluid, so the slider is a ceiling rather than the actual size.
+// Without this the page scrolls sideways on a phone as soon as the slider goes
+// past the viewport width.
+function heroSize() {
+  const avail = ($('stage').clientWidth || 360) - 44;
+  return Math.max(80, Math.min(ui.size, Math.round(avail)));
+}
+
+function applyHero() {
+  hero.update({
+    seed: ui.seed,
+    archetype: ui.archetype,
+    palette: ui.hue < 0 ? 'auto' : ui.hue,
+    size: heroSize(),
+    state: ui.state,
+    lens: ui.lens < 0 ? undefined : ui.lens / 100,
+    background: 'auto',
+  });
+
+  const id = identityForSeed(ui.seed);
+  const pal = hero.palette;
+  const m = hero.metrics;
+  $('m-seed').textContent = ui.seed === '' ? '(empty)' : ui.seed;
+  $('m-hash').textContent = id.hash.toString(16);
+  $('m-hue').textContent = Math.round(pal.hue) + '°';
+  $('m-arch').textContent = ui.archetype === 'auto' ? id.archetype + ' *' : ui.archetype;
+  $('m-px').textContent = m.px + '²';
+  $('m-state').textContent = hero.state;
+
+  paintAccent();
+}
+
+// Page chrome follows the orb, so the seed dresses the whole page.
+//
+// Two colours out of the same palette though: accents[1] is a light tint tuned
+// to glow inside a dark sphere and it fails contrast as text on a white page.
+// The palette anchor sits at ~42% lightness by construction, so that is the one
+// for a light ground.
+function paintAccent() {
+  const pal = hero.palette;
+  // --accent in :root is only the pre-paint default, which is why the default
+  // seed is picked to land on a blue hue and not a pink one.
+  const light = document.body.classList.contains('light');
+  document.documentElement.style.setProperty('--accent', light ? pal.anchor : pal.accents[1]);
+  document.documentElement.style.setProperty('--glow', pal.accents[1]);
+}
+
+if (typeof ResizeObserver === 'function') {
+  let last = 0;
+  new ResizeObserver(() => {
+    const s = heroSize();
+    if (s !== last) { last = s; hero.update({ size: s }); }
+  }).observe($('stage'));
+}
+
+/* the four states */
+
+function setState(next) {
+  ui.state = next;
+  hero.setState(next);
+  for (const b of $('states').querySelectorAll('[data-state]')) {
+    b.setAttribute('aria-pressed', String(b.dataset.state === next));
+  }
+  $('m-state').textContent = next;
+}
+for (const b of $('states').querySelectorAll('[data-state]')) {
+  b.addEventListener('click', () => setState(b.dataset.state));
+}
+
+/* controls */
+
+const NAMES = ['orion', 'vega', 'lyra', 'cassini', 'kepler', 'hypatia', 'turing', 'noether',
+               'ramanujan', 'hopper', 'lovelace', 'shannon', 'curie', 'fermi', 'borges', 'rubin'];
+
+$('c-seed').addEventListener('input', (e) => { ui.seed = e.target.value; applyHero(); });
+
+$('c-shuffle').addEventListener('click', () => {
+  ui.seed = NAMES[(Math.random() * NAMES.length) | 0] + '-' + ((Math.random() * 900 + 100) | 0);
+  $('c-seed').value = ui.seed;
+  applyHero();
+});
+
+$('c-copy').addEventListener('click', async (e) => {
+  const lines = ['createOrb(el, {', '  seed: ' + JSON.stringify(ui.seed) + ',', '  size: ' + ui.size + ','];
+  if (ui.archetype !== 'auto') lines.push("  archetype: '" + ui.archetype + "',");
+  if (ui.hue >= 0) lines.push('  palette: ' + ui.hue + ',');
+  if (ui.lens >= 0) lines.push('  lens: ' + (ui.lens / 100).toFixed(2) + ',');
+  lines.push("  state: '" + ui.state + "',", '});');
+  const label = e.target.textContent;
+  try { await navigator.clipboard.writeText(lines.join('\n')); e.target.textContent = 'copied'; }
+  catch { e.target.textContent = 'copy failed'; }
+  setTimeout(() => { e.target.textContent = label; }, 1300);
+});
+
+$('c-arch').addEventListener('change', (e) => { ui.archetype = e.target.value; applyHero(); });
+
+$('c-size').addEventListener('input', (e) => {
+  ui.size = +e.target.value;
+  $('c-size-v').textContent = ui.size + ' px';
+  applyHero();
+});
+
+$('c-lens').addEventListener('input', (e) => {
+  ui.lens = +e.target.value;
+  $('c-lens-v').textContent = ui.lens < 0 ? 'auto' : (ui.lens / 100).toFixed(2);
+  applyHero();
+});
+
+$('c-hue').addEventListener('input', (e) => {
+  ui.hue = +e.target.value;
+  $('c-hue-v').textContent = ui.hue < 0 ? 'auto' : ui.hue + '°';
+  applyHero();
+});
+
+/* page theme */
+
+function setTheme(light) {
+  document.body.classList.toggle('light', light);
+  const b = $('theme-btn');
+  b.textContent = light ? 'light' : 'dark';
+  b.setAttribute('aria-pressed', String(light));
+  document.querySelector('meta[name=color-scheme]').content = light ? 'light dark' : 'dark light';
+  paintAccent();
+  // background:'auto' re-reads the DOM on the next update, which is how the
+  // glass keeps working after a flip to the white page.
+  requestAnimationFrame(() => {
+    hero.update({});
+    for (const o of extras) if (o.options.background === 'auto') o.update({});
+  });
+}
+$('theme-btn').addEventListener('click', () => setTheme(!document.body.classList.contains('light')));
+
+/* audio */
+
+let source = null;
+let kind = 'synthetic';
+
+function msg(text) {
+  const el = $('c-msg');
+  el.textContent = text || '';
+  el.classList.toggle('show', !!text);
+}
+
+// Speaking previews. Static audio generated once by scripts/generate-phrases.mjs,
+// same-origin so the analyser sees a real waveform. No key needed at runtime.
+let phrasePlayback = null;
+let playingChip = null;
+
+(function initPhrases() {
+  const host = $('hero-phrase-chips');
+  if (!host) return;
+
+  const chips = PHRASES.map((p) => {
+    const b = document.createElement('button');
+    b.className = 'chip';
+    b.type = 'button';
+    b.setAttribute('aria-pressed', 'false');
+    b.setAttribute('aria-label', p.label + ': ' + p.text);
+
+    const ico = document.createElement('i');
+    ico.className = 'chip-ico';
+    const dot = document.createElement('i');
+    dot.className = 'chip-dot';
+    dot.dataset.state = p.state;
+    const label = document.createElement('span');
+    label.textContent = p.label;
+
+    b.append(ico, label, dot);
+    b.addEventListener('click', () => play(p, b));
+    host.appendChild(b);
+    return b;
+  });
+
+  phrasesAvailable().then((ok) => {
+    if (ok) return;
+    $('hero-phrases-label').textContent =
+      'run node scripts/generate-phrases.mjs to enable previews';
+    for (const c of chips) c.disabled = true;
+  });
+
+  function reset(chip) {
+    chip.setAttribute('aria-pressed', 'false');
+    chip.style.setProperty('--p', 0);
+  }
+
+  async function play(phrase, chip) {
+    resumeAudio();                       // inside the user gesture
+    if (phrasePlayback) { phrasePlayback.stop(); phrasePlayback = null; }
+    if (playingChip) reset(playingChip);
+
+    if (chip === playingChip) {          // click the playing chip to stop
+      playingChip = null;
+      return;
+    }
+
+    if (source) { source.stop(); source = null; }
+    hero.unlisten();
+    markSource(null);
+    msg('');
+
+    playingChip = chip;
+    chip.setAttribute('aria-pressed', 'true');
+
+    try {
+      phrasePlayback = playPhrase(hero, phrase.id, { endState: 'idle' });
+      const audio = phrasePlayback.audio;
+      if (audio) {
+        // fill the chip as it speaks
+        audio.addEventListener('timeupdate', () => {
+          if (!audio.duration) return;
+          chip.style.setProperty('--p', (audio.currentTime / audio.duration).toFixed(3));
+        });
+      }
+      await phrasePlayback;
+    } catch (err) {
+      msg(isNotGenerated(err)
+        ? 'No audio for that phrase yet. Run: node scripts/generate-phrases.mjs'
+        : 'Playback failed: ' + err.message);
+    } finally {
+      reset(chip);
+      if (playingChip === chip) playingChip = null;
+      phrasePlayback = null;
+    }
+  }
+
+})();
+
+function markSource(k) {
+  kind = k;
+  for (const b of document.querySelectorAll('[data-src]')) {
+    b.setAttribute('aria-pressed', String(b.dataset.src === k));
+  }
+}
+
+async function selectSource(next) {
+  if (next === kind) return;
+  msg('');
+  resumeAudio();                       // we are inside a user gesture here
+  if (source) { source.stop(); source = null; }
+  hero.unlisten();
+  markSource(next);
+
+  try {
+    if (next === 'synthetic') {
+      source = OrbAudioSource.synthetic();
+      $('c-src-v').textContent = 'synthetic';
+    } else if (next === 'speech') {
+      source = OrbAudioSource.speech();
+      $('c-src-v').textContent = 'speech · audible';
+      setState('speaking');
+    } else if (next === 'microphone') {
+      $('c-src-v').textContent = 'requesting…';
+      source = await OrbAudioSource.microphone();
+      $('c-src-v').textContent = 'microphone';
+      setState('listening');
+    }
+  } catch (err) {
+    markSource('synthetic');
+    source = OrbAudioSource.synthetic();
+    $('c-src-v').textContent = 'synthetic';
+    msg(next === 'microphone'
+      ? 'Microphone unavailable: ' + err.message + ' getUserMedia needs https or localhost, plus ' +
+        'permission. Nothing else on this page does.'
+      : 'No Web Audio here, so the orb fell back to the silent level-only envelope.');
+  }
+
+  hero.listen(source);
+}
+
+for (const b of document.querySelectorAll('[data-src]')) {
+  b.addEventListener('click', () => selectSource(b.dataset.src));
+}
+
+/* glass proof */
+
+const PROOF_SEED = 'vera-rubin';
+extras.push(createOrb($('proof-light'), { seed: PROOF_SEED, size: 190, state: 'speaking', background: '#ffffff' }));
+extras.push(createOrb($('proof-dark'),  { seed: PROOF_SEED, size: 190, state: 'speaking', background: '#06070c' }));
+
+const TONES = ['#ffffff', '#e6e8ee', '#c2c7d2', '#8d94a6', '#4d5468', '#232939', '#06070c'];
+for (const tone of TONES) {
+  const cell = document.createElement('div');
+  cell.className = 'cell';
+  cell.style.background = tone;
+  $('ramp').appendChild(cell);
+  extras.push(createOrb(cell, { seed: PROOF_SEED, size: 62, background: tone, state: 'thinking' }));
+}
+
+/* roster */
+
+const ROSTER = [
+  ['atlas-01', 'Atlas'], ['meridian-07', 'Meridian'], ['quill-12', 'Quill'],
+  ['sable-33', 'Sable'], ['pike-19', 'Pike'], ['juno-04', 'Juno'],
+  ['halcyon-88', 'Halcyon'], ['tessera-51', 'Tessera'], ['onyx-26', 'Onyx'],
+  ['vesper-60', 'Vesper'], ['cobalt-14', 'Cobalt'], ['marlow-72', 'Marlow'],
+  ['io-09', 'Io'], ['calliope-45', 'Calliope'], ['reed-31', 'Reed'],
+  ['nimbus-77', 'Nimbus'], ['fen-22', 'Fen'], ['solace-38', 'Solace'],
+];
+
+const rosterOrbs = ROSTER.map(([seed, who], i) => {
+  const row = document.createElement('div');
+  row.className = 'agent';
+  const mount = document.createElement('div');
+  const txt = document.createElement('div');
+  txt.style.minWidth = '0';
+  const nameEl = document.createElement('div');
+  nameEl.className = 'who';
+  nameEl.textContent = who;
+  const stEl = document.createElement('div');
+  stEl.className = 'st';
+  const st = STATES[i % STATES.length];
+  stEl.textContent = st;
+  txt.append(nameEl, stEl);
+  row.append(mount, txt);
+  $('roster').appendChild(row);
+  const orb = createOrb(mount, { seed, size: 40, state: st, background: 'auto' });
+  extras.push(orb);
+  return { orb, stEl };
+});
+
+// A roster is never all one state. Nudge one agent at a time so the crossfade is
+// visible in the periphery. Off under prefers-reduced-motion.
+if (!reduced) {
+  setInterval(() => {
+    if (document.hidden) return;
+    const t = rosterOrbs[(Math.random() * rosterOrbs.length) | 0];
+    const st = STATES[(Math.random() * STATES.length) | 0];
+    t.orb.setState(st);
+    t.stEl.textContent = st;
+  }, 2200);
+}
+
+/* nav logo */
+
+extras.push(createOrb($('logo-orb'), { seed: 'earlbalai', size: 26, state: 'thinking', background: 'auto' }));
+
+/* embed tabs */
+
+for (const b of $('tabs').querySelectorAll('[data-tab]')) {
+  b.addEventListener('click', () => {
+    for (const other of $('tabs').querySelectorAll('[data-tab]')) {
+      other.setAttribute('aria-pressed', String(other === b));
+    }
+    for (const p of document.querySelectorAll('[data-panel]')) {
+      p.hidden = p.dataset.panel !== b.dataset.tab;
+    }
+  });
+}
+
+for (const btn of document.querySelectorAll('.snip .copy')) {
+  btn.addEventListener('click', async () => {
+    const code = btn.parentElement.querySelector('code');
+    try { await navigator.clipboard.writeText(code.textContent); btn.textContent = 'copied'; }
+    catch { btn.textContent = 'copy failed'; }
+    setTimeout(() => { btn.textContent = 'copy'; }, 1300);
+  });
+}
+
+/* level meter */
+
+let raf = 0;
+function tick() {
+  raf = 0;
+  const m = hero.metrics;
+  $('c-level').style.width = Math.round(Math.min(1, m.slow) * 100) + '%';
+  if (!document.hidden && !reduced) raf = requestAnimationFrame(tick);
+}
+function startMeter() { if (!raf && !document.hidden && !reduced) raf = requestAnimationFrame(tick); }
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { if (raf) cancelAnimationFrame(raf); raf = 0; } else startMeter();
+});
+
+/* boot */
+
+applyHero();
+source = OrbAudioSource.synthetic();
+hero.listen(source);
+startMeter();
+
+if (!isSupported()) {
+  msg('No usable WebGL here, so every orb is painting its seeded static gradient instead of a blank ' +
+      'square. The identity still reads, just without the motion.');
+} else if (reduced) {
+  msg('prefers-reduced-motion is on, so every orb drew one static frame and the render loop never started. ' +
+      'The state buttons still repaint.');
+}
+
+// For poking at from the console.
+Object.assign(window, { hero, ARCHETYPES, STATES });
+</script>
+
+<script>
+  // Classic script, so it still runs when the module above is refused. A module
+  // that never executes leaves window.hero unset, which is the only reliable
+  // signal we get for the file:// CORS failure.
+  window.addEventListener('load', () => {
+    setTimeout(() => {
+      if (!window.hero) {
+        document.getElementById('boot').classList.add('show');
+        document.getElementById('app').hidden = true;
+      }
+    }, 250);
+  });
+</script>
+</body>
+</html>

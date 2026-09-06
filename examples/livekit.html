@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orb - LiveKit</title>
+
+<!--
+  Orb by Earl Balai. LiveKit example.
+
+  A room's remote audio track driving the orb.
+
+  Orb has no dependencies and this example adds none, so it will not import
+  livekit-client from a CDN. Instead there is one hook, loadLiveKit(), which
+  returns the LiveKit client module if your app has already made it available
+  and null otherwise. Wire it up however your build already works:
+
+      // bundler
+      import { Room, RoomEvent } from 'livekit-client';
+      window.LivekitClient = { Room, RoomEvent };
+
+      // or a script tag you add yourself, before this module
+      <script src="/vendor/livekit-client.umd.js"></script>
+
+  With nothing wired up the page runs in demo mode and an audible synthetic
+  voice stands in for the remote participant, so you can see what the orb does
+  before touching your room code.
+
+  The integration in full: LiveKit hands you a RemoteAudioTrack when a track is
+  subscribed, that object exposes .mediaStreamTrack, and that is all Orb wants.
+
+      room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+        if (track.kind !== 'audio') return;
+        stop = orb.listenTo(track.mediaStreamTrack);
+        orb.state = 'speaking';
+      });
+
+  Everything else here is state routing and page chrome.
+
+  A LiveKit access token is a credential. Mint it on your server with your API
+  key and secret, scoped to one room and one identity, and hand the browser only
+  the finished JWT. TOKEN_ENDPOINT below is a placeholder for that route on your
+  own origin. Never put a LiveKit API secret in a page.
+-->
+
+<style>
+  :root { --bg:#07080c; --panel:#11131a; --line:#232733; --fg:#e8ebf2;
+          --dim:#8b93a7; --accent:#7dd3fc; --warn:#fbbf24; }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+         padding:32px 20px; background:var(--bg); color:var(--fg);
+         font:14px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .card { width:100%; max-width:520px; background:var(--panel); border:1px solid var(--line);
+          border-radius:18px; padding:28px; text-align:center; }
+  h1 { margin:0 0 4px; font-size:17px; font-weight:600; letter-spacing:-0.01em; }
+  .sub { margin:0 0 22px; color:var(--dim); font-size:13px; }
+  #orb-slot { display:flex; justify-content:center; align-items:center; min-height:260px; }
+
+  .states { display:flex; gap:6px; justify-content:center; margin-top:18px; }
+  .pill { font:11px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+          padding:6px 11px; border-radius:999px; border:1px solid var(--line);
+          color:var(--dim); background:#141821; }
+  .pill.on { color:#06121a; background:var(--accent); border-color:var(--accent); }
+
+  .controls { display:flex; gap:10px; justify-content:center; margin-top:20px; flex-wrap:wrap; }
+  button { font:inherit; font-weight:550; padding:9px 18px; border-radius:999px;
+           border:1px solid var(--line); background:#1b1f29; color:var(--fg); cursor:pointer; }
+  button:hover:not(:disabled) { border-color:#39414f; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#06121a; }
+  button:disabled { opacity:0.4; cursor:default; }
+
+  .bars { display:grid; grid-template-columns:64px 1fr; gap:6px 10px; margin-top:22px;
+          align-items:center; text-align:left; }
+  .bars span { font:11px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color:var(--dim); }
+  .track { height:5px; border-radius:3px; background:#1b1f29; overflow:hidden; }
+  .fill { height:100%; width:0%; background:var(--accent); transition:width 60ms linear; }
+  .fill.user { background:#a78bfa; }
+
+  .note { margin-top:20px; padding-top:16px; border-top:1px solid var(--line);
+          color:var(--dim); font-size:12px; text-align:left; min-height:34px; }
+  .warn { color:var(--warn); }
+  code { font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color:#b7c0d4; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h1>LiveKit room</h1>
+  <p class="sub">A subscribed remote audio track drives the orb.</p>
+
+  <div id="orb-slot"></div>
+
+  <div class="states">
+    <span class="pill" data-state="idle">idle</span>
+    <span class="pill" data-state="listening">listening</span>
+    <span class="pill" data-state="thinking">thinking</span>
+    <span class="pill" data-state="speaking">speaking</span>
+  </div>
+
+  <div class="controls">
+    <button id="join" class="primary">Join room</button>
+    <button id="leave" disabled>Leave</button>
+  </div>
+
+  <div class="bars">
+    <span>remote</span><div class="track"><div class="fill" id="remote-fill"></div></div>
+    <span>you</span><div class="track"><div class="fill user" id="user-fill"></div></div>
+  </div>
+
+  <p class="note" id="note">
+    No LiveKit client detected, so Join will run demo mode. Details at the top of this file.
+  </p>
+</div>
+
+<script type="module">
+  import {
+    createOrb,
+    OrbAudioSource,
+    resumeAudio,
+  } from '../src/orb.js';
+
+  /**
+   * A route on YOUR OWN SERVER that mints a LiveKit access token (a JWT) for the
+   * signed-in user, scoped to one room. Key and secret stay on the server, only
+   * the finished JWT reaches the browser.
+   */
+  const TOKEN_ENDPOINT = '/api/livekit-token';
+
+  /** Your LiveKit server URL, e.g. wss://my-project.livekit.cloud */
+  const LIVEKIT_URL = 'wss://YOUR-PROJECT.livekit.cloud';
+
+  /**
+   * The livekit-client module if your app has made it available, else null. Orb
+   * ships no dependencies, so this example will not pull an SDK off a CDN on your
+   * behalf. How it gets here is your call.
+   */
+  function loadLiveKit() {
+    // The UMD build and most bundler setups expose one of these globals.
+    return window.LivekitClient || window.LiveKit || null;
+  }
+
+  const orb = createOrb(document.getElementById('orb-slot'), {
+    seed: 'livekit-voice-agent',
+    size: 240,
+    state: 'idle',
+  });
+
+  const note       = document.getElementById('note');
+  const joinBtn    = document.getElementById('join');
+  const leaveBtn   = document.getElementById('leave');
+  const pills      = [...document.querySelectorAll('.pill')];
+  const remoteFill = document.getElementById('remote-fill');
+  const userFill   = document.getElementById('user-fill');
+
+  // The router. Same three-way split as the OpenAI example: remote audio is the
+  // agent speaking, local audio is the human being listened to, and the silence
+  // after the human's turn is the agent thinking.
+
+  let remoteSource = null, userSource = null;
+  let remoteLevel = 0, userLevel = 0;
+  // -Infinity, not 0. With 0 the (now - lastVoice < HOLD_MS) tests below are true
+  // for the first 220ms of the page's life, since performance.now() starts near
+  // zero, and the orb opens in 'speaking' before a single sample has been read.
+  let lastUserVoice = -Infinity, lastRemoteVoice = -Infinity;
+
+  const REMOTE_GATE = 0.045;
+  const USER_GATE   = 0.10;
+  const HOLD_MS     = 220;
+  const THINKING_TIMEOUT_MS = 6000;
+
+  function route() {
+    const now = performance.now();
+    if (remoteLevel > REMOTE_GATE) lastRemoteVoice = now;
+    if (userLevel   > USER_GATE)   lastUserVoice   = now;
+
+    if (now - lastRemoteVoice < HOLD_MS) {
+      orb.level = remoteLevel;
+      orb.state = 'speaking';
+    } else if (now - lastUserVoice < HOLD_MS) {
+      orb.level = userLevel;
+      orb.state = 'listening';
+    } else if (Number.isFinite(lastUserVoice) && now - lastUserVoice < THINKING_TIMEOUT_MS) {
+      orb.level = 0;
+      orb.state = 'thinking';
+    } else {
+      orb.level = 0;
+      orb.state = 'idle';
+    }
+  }
+
+  /**
+   * The whole LiveKit integration. Call it from RoomEvent.TrackSubscribed with the
+   * RemoteAudioTrack.
+   *
+   * RemoteAudioTrack wraps a plain MediaStreamTrack on .mediaStreamTrack, and Orb
+   * takes that directly: fromTrack puts it in a private one-track MediaStream,
+   * attaches an analyser, and holds a reference so the stream cannot be collected
+   * mid-call. Disposing never stops the track, so unbinding the orb does not
+   * disconnect the participant.
+   *
+   * Playback stays with LiveKit. track.attach() is what the user actually hears;
+   * the orb only measures. Do not swap one for the other.
+   */
+  function bindRemoteAudioTrack(livekitTrack) {
+    const mst = livekitTrack.mediaStreamTrack || livekitTrack;
+    remoteSource = OrbAudioSource.fromTrack(mst);
+    remoteSource.start();                 // we start it, so we own the teardown
+    // onLevel only records the amplitude. route() runs once per frame in paint(),
+    // so there is one decision per frame however many sources are live, and it
+    // keeps running when none are, which is what lets 'thinking' time out.
+    remoteSource.onLevel((v) => { remoteLevel = v; });
+  }
+
+  async function bindUserMic() {
+    userSource = await OrbAudioSource.microphone({ gain: 3.2 });
+    userSource.start();
+    userSource.onLevel((v) => { userLevel = v; });
+  }
+
+  let room = null;
+  let demoStop = null;
+
+  joinBtn.addEventListener('click', async () => {
+    joinBtn.disabled = true;
+
+    // From the gesture, before anything touches Web Audio.
+    await resumeAudio();
+
+    try { await bindUserMic(); }
+    catch (err) {
+      console.warn('[demo] no microphone', err);
+      note.innerHTML = '<span class="warn">Microphone unavailable</span> - only the remote side will animate.';
+    }
+
+    const LK = loadLiveKit();
+    if (!LK || !LK.Room) { startDemo('No livekit-client on the page.'); return; }
+
+    let token;
+    try {
+      const res = await fetch(TOKEN_ENDPOINT, { method: 'POST' });
+      if (!res.ok) throw new Error('token endpoint returned ' + res.status);
+      token = (await res.json()).token;
+      if (!token) throw new Error('no token in the response body');
+    } catch (err) {
+      startDemo('No LiveKit token: ' + err.message);
+      return;
+    }
+
+    try {
+      await joinRoom(LK, token);
+    } catch (err) {
+      console.error('[demo] LiveKit connect failed', err);
+      startDemo('Connect failed: ' + err.message);
+    }
+  });
+
+  /**
+   * A minimal join. Three LiveKit APIs, all stable for a long time: new Room(),
+   * room.connect(), RoomEvent.TrackSubscribed. Metadata, data channels, agent RPC
+   * and anything else your app needs are yours to add and do not concern the orb.
+   */
+  async function joinRoom(LK, token) {
+    room = new LK.Room();
+
+    room.on(LK.RoomEvent.TrackSubscribed, (track /*, publication, participant */) => {
+      if (track.kind !== 'audio') return;     // ignore video and data
+      if (remoteSource) return;               // first agent track wins
+
+      // Let LiveKit play it, so the user hears the agent.
+      const el = track.attach();
+      el.style.display = 'none';
+      document.body.appendChild(el);
+
+      // And let Orb measure it.
+      bindRemoteAudioTrack(track);
+
+      note.innerHTML = 'Subscribed to a remote audio track. It is driving <code>speaking</code>.';
+    });
+
+    room.on(LK.RoomEvent.TrackUnsubscribed, (track) => {
+      if (track.kind !== 'audio') return;
+      try { for (const el of track.detach()) el.remove(); } catch {}
+      if (remoteSource) { remoteSource.stop(); remoteSource = null; }
+      remoteLevel = 0;
+      route();
+    });
+
+    room.on(LK.RoomEvent.Disconnected, () => teardown('Disconnected.'));
+
+    await room.connect(LIVEKIT_URL, token);
+
+    // Publish the human's mic so the agent can hear them. LiveKit opens its own
+    // capture for this and our analyser above holds a separate getUserMedia
+    // handle, which is fine, the browser shares the device.
+    try { await room.localParticipant.setMicrophoneEnabled(true); } catch (err) {
+      console.warn('[demo] could not publish the microphone', err);
+    }
+
+    leaveBtn.disabled = false;
+    note.innerHTML = 'Connected to <code>' + LIVEKIT_URL + '</code>. Waiting for the agent to publish audio.';
+  }
+
+  /**
+   * Demo mode. An audible synthetic voice stands in for the remote participant and
+   * cycles between talking and silence, so all four states are reachable without a
+   * room.
+   */
+  function startDemo(reason) {
+    let stopped = false;
+    const cycle = () => {
+      if (stopped) return;
+      // Gain far above the 3.2 that suits real speech. speech() is a quiet demo
+      // tone whose RMS through two narrow formants sits under REMOTE_GATE at the
+      // default and would read as silence. Real remote audio arrives at a normal
+      // level and wants the default.
+      remoteSource = OrbAudioSource.speech({ volume: 0.09, gain: 26 });
+      remoteSource.start();
+      remoteSource.onLevel((v) => { remoteLevel = v; });
+      setTimeout(() => {
+        if (stopped || !remoteSource) return;
+        remoteSource.stop();
+        remoteSource = null;
+        remoteLevel = 0;
+      }, 5000);
+      setTimeout(cycle, 10500);
+    };
+    // Pretend the human finished a turn a moment ago, so we open in 'thinking'
+    // rather than inside the brief 'listening' hold window.
+    lastUserVoice = performance.now() - HOLD_MS - 1;
+    setTimeout(cycle, 1500);
+    demoStop = () => { stopped = true; };
+
+    leaveBtn.disabled = false;
+    note.innerHTML = 'DEMO MODE (' + reason + ') - <code>OrbAudioSource.speech()</code> ' +
+      'is standing in for the remote participant. Talk over it to see <code>listening</code>.';
+  }
+
+  function teardown(message) {
+    if (demoStop) { demoStop(); demoStop = null; }
+    if (room) { try { room.disconnect(); } catch {} room = null; }
+    if (remoteSource) { remoteSource.stop(); remoteSource = null; }
+    if (userSource)   { userSource.stop();   userSource   = null; }
+    remoteLevel = userLevel = 0;
+    lastUserVoice = lastRemoteVoice = -Infinity;
+    orb.level = 0;
+    orb.state = 'idle';
+    for (const el of document.querySelectorAll('body > audio')) el.remove();
+    joinBtn.disabled = false;
+    leaveBtn.disabled = true;
+    note.textContent = message;
+  }
+
+  leaveBtn.addEventListener('click', () => teardown('Left the room.'));
+
+  // page chrome
+
+  (function paint() {
+    // The router ticks here, once per frame, so it keeps working when every source
+    // has been stopped and nothing is emitting levels any more.
+    route();
+    for (const p of pills) p.classList.toggle('on', p.dataset.state === orb.state);
+    remoteFill.style.width = (remoteLevel * 100).toFixed(1) + '%';
+    userFill.style.width   = (userLevel   * 100).toFixed(1) + '%';
+    requestAnimationFrame(paint);
+  })();
+
+  if (!loadLiveKit()) {
+    note.innerHTML = 'No <code>livekit-client</code> detected on the page, so Join will run in demo mode. ' +
+      'The comment at the top of this file covers wiring up the real SDK.';
+  } else {
+    note.innerHTML = 'livekit-client detected. Set <code>LIVEKIT_URL</code> and <code>TOKEN_ENDPOINT</code>, then Join.';
+  }
+
+  window.addEventListener('pagehide', () => orb.destroy());
+  window.orb = orb;
+</script>
+</body>
+</html>

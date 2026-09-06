@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /examples/
+Disallow: /api/
+
+Sitemap: https://xyorb.vidome.app/sitemap.xml

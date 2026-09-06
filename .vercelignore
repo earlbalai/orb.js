@@ -1,0 +1,28 @@
+# .vercelignore — what does NOT get uploaded to Vercel.
+#
+# src/ MUST be deployed: /v1/:path* rewrites to /src/:path*, so src/orb.js,
+# src/element.js and src/react.js are the actual bytes behind the public
+# https://xyorb.vercel.app/v1/... embed URLs. Never ignore src/ itself.
+
+# --- Development scratch — superseded by src/ ---
+build-a/
+build-b/
+build-c/
+orb/
+
+# --- Third-party source, kept locally for reference only. Never deploy. ---
+reference/
+
+# --- Agent scratch harnesses (src/__look.html, src/__verify*.html, ...) ---
+# Anchored form for the known location, plus an unanchored guard so a stray
+# __scratch.html in any directory can never reach the CDN.
+src/__*.html
+__*.html
+
+# --- Local tooling / config ---
+.vercel/
+node_modules/
+
+# --- Misc ---
+.DS_Store
+Thumbs.db

@@ -1,0 +1,62 @@
+{
+  "model": "gpt-4o-mini-tts",
+  "voice": "alloy",
+  "phrases": [
+    {
+      "id": "greeting",
+      "label": "Greeting",
+      "state": "speaking",
+      "text": "Hey — good to meet you. I'm listening whenever you're ready.",
+      "src": "/audio/greeting.mp3"
+    },
+    {
+      "id": "thinking-aloud",
+      "label": "Thinking aloud",
+      "state": "thinking",
+      "text": "Let me check that... okay. Give me one second while I pull it up.",
+      "src": "/audio/thinking-aloud.mp3"
+    },
+    {
+      "id": "short-answer",
+      "label": "Short answer",
+      "state": "speaking",
+      "text": "Yes. Three of them, all before noon.",
+      "src": "/audio/short-answer.mp3"
+    },
+    {
+      "id": "list",
+      "label": "Reading a list",
+      "state": "speaking",
+      "text": "I found four options. The first leaves at six forty, the second at nine fifteen, the third just after noon, and the last one at half past four.",
+      "src": "/audio/list.mp3"
+    },
+    {
+      "id": "explanation",
+      "label": "Long explanation",
+      "state": "speaking",
+      "text": "So the way this works is fairly simple. There is no geometry in the orb at all — the sphere is solved analytically for every pixel, the view ray is refracted through the glass, and the galaxy behind it is sampled a second time where that ray exits the far wall. That second sample is the whole trick. Without it you have a flat disc with a picture on it.",
+      "src": "/audio/explanation.mp3"
+    },
+    {
+      "id": "question",
+      "label": "Asking back",
+      "state": "listening",
+      "text": "Before I book it — do you want the window seat, or is the aisle fine?",
+      "src": "/audio/question.mp3"
+    },
+    {
+      "id": "confirm",
+      "label": "Confirming",
+      "state": "speaking",
+      "text": "Done. I've sent the confirmation to your email.",
+      "src": "/audio/confirm.mp3"
+    },
+    {
+      "id": "apology",
+      "label": "Bad news",
+      "state": "speaking",
+      "text": "I'm sorry — that one just sold out. Want me to look at the next day instead?",
+      "src": "/audio/apology.mp3"
+    }
+  ]
+}

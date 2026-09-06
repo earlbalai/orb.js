@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orb - OpenAI Realtime (WebRTC)</title>
+
+<!--
+  Orb by Earl Balai. OpenAI Realtime over WebRTC.
+
+  The interesting part here is the routing, not the SDK. A voice agent hands you
+  two audio signals and one silence, and each maps onto an orb state:
+
+      inbound remote MediaStream (the agent's voice) ->  'speaking'
+      local getUserMedia stream  (the human's voice) ->  'listening'
+      neither, after the human stopped              ->  'thinking'
+      neither, idle                                 ->  'idle'
+
+  That router is about 40 lines and is the part worth copying. The WebRTC
+  handshake below it is boilerplate you probably already have.
+
+  The ephemeral key, before you ship. A browser page must never hold a standard
+  OpenAI API key: everything in this file is readable by every visitor, and a
+  leaked key is a bill and an incident.
+
+  The supported pattern is a short-lived client secret minted server-side. Your
+  backend holds the real OPENAI_API_KEY and exposes one authenticated route
+  (TOKEN_ENDPOINT below) that creates a Realtime session and returns only the
+  short-lived secret; this page uses that secret for exactly one SDP exchange.
+  The constant below is a placeholder for that route, on your own origin, not an
+  OpenAI URL. Nothing here should ever be edited to hold an sk- key.
+
+  Check the session-creation route, model ids and the Realtime SDP endpoint
+  against the current OpenAI docs before shipping, since those move faster than
+  any example file. All Orb wants from the result is the RTCPeerConnection's
+  inbound MediaStream, which is stable.
+
+  With no backend configured the page runs in demo mode: an audible synthetic
+  voice stands in for the agent, your real microphone still drives 'listening',
+  and the whole state machine is visible without any keys.
+-->
+
+<style>
+  :root {
+    --bg:#07080c; --panel:#11131a; --line:#232733; --fg:#e8ebf2;
+    --dim:#8b93a7; --accent:#7dd3fc; --warn:#fbbf24;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+    padding:32px 20px; background:var(--bg); color:var(--fg);
+    font:14px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .card { width:100%; max-width:520px; background:var(--panel); border:1px solid var(--line);
+          border-radius:18px; padding:28px; text-align:center; }
+  h1 { margin:0 0 4px; font-size:17px; font-weight:600; letter-spacing:-0.01em; }
+  .sub { margin:0 0 22px; color:var(--dim); font-size:13px; }
+  #orb-slot { display:flex; justify-content:center; align-items:center; min-height:260px; }
+
+  .states { display:flex; gap:6px; justify-content:center; margin-top:18px; }
+  .pill { font:11px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+          padding:6px 11px; border-radius:999px; border:1px solid var(--line);
+          color:var(--dim); background:#141821; }
+  .pill.on { color:#06121a; background:var(--accent); border-color:var(--accent); }
+
+  .controls { display:flex; gap:10px; justify-content:center; margin-top:20px; flex-wrap:wrap; }
+  button { font:inherit; font-weight:550; padding:9px 18px; border-radius:999px;
+           border:1px solid var(--line); background:#1b1f29; color:var(--fg); cursor:pointer; }
+  button:hover:not(:disabled) { border-color:#39414f; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#06121a; }
+  button:disabled { opacity:0.4; cursor:default; }
+
+  .bars { display:grid; grid-template-columns:64px 1fr; gap:6px 10px; margin-top:22px;
+          align-items:center; text-align:left; }
+  .bars span { font:11px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color:var(--dim); }
+  .track { height:5px; border-radius:3px; background:#1b1f29; overflow:hidden; }
+  .fill  { height:100%; width:0%; background:var(--accent); transition:width 60ms linear; }
+  .fill.user { background:#a78bfa; }
+
+  .note { margin-top:20px; padding-top:16px; border-top:1px solid var(--line);
+          color:var(--dim); font-size:12px; text-align:left; min-height:34px; }
+  .warn { color:var(--warn); }
+  code { font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color:#b7c0d4; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h1>OpenAI Realtime</h1>
+  <p class="sub">Remote stream drives speaking, your mic drives listening, the gap is thinking.</p>
+
+  <div id="orb-slot"></div>
+
+  <div class="states">
+    <span class="pill" data-state="idle">idle</span>
+    <span class="pill" data-state="listening">listening</span>
+    <span class="pill" data-state="thinking">thinking</span>
+    <span class="pill" data-state="speaking">speaking</span>
+  </div>
+
+  <div class="controls">
+    <button id="connect" class="primary">Start call</button>
+    <button id="hangup" disabled>Hang up</button>
+  </div>
+
+  <div class="bars">
+    <span>agent</span><div class="track"><div class="fill" id="agent-fill"></div></div>
+    <span>you</span><div class="track"><div class="fill user" id="user-fill"></div></div>
+  </div>
+
+  <p class="note" id="note">
+    No backend configured, so this will run in demo mode.
+    The ephemeral-key rules are at the top of this file.
+  </p>
+</div>
+
+<script type="module">
+  import {
+    createOrb,
+    OrbAudioSource,
+    resumeAudio,
+  } from '../src/orb.js';
+
+  // Configuration. The only two lines you edit.
+
+  /**
+   * A route on YOUR OWN SERVER that mints a short-lived Realtime client secret.
+   * Authenticated as your user, and it must never hand back your real API key.
+   * Set it to null, or leave the placeholder unreachable, to run in demo mode.
+   *
+   * Never put an OpenAI API key in this file.
+   */
+  const TOKEN_ENDPOINT = '/api/realtime-session';
+
+  /** The Realtime model your backend created the session with. */
+  const MODEL = 'gpt-realtime';
+
+  const slot = document.getElementById('orb-slot');
+  const note = document.getElementById('note');
+
+  // The seed is this agent's permanent identity. Pass your agent's id and it
+  // looks the same in every session, on every device.
+  const orb = createOrb(slot, {
+    seed: 'openai-realtime-agent',
+    size: 240,
+    state: 'idle',
+  });
+
+  // state pills and meters, page chrome rather than integration
+
+  const pills     = [...document.querySelectorAll('.pill')];
+  const agentFill = document.getElementById('agent-fill');
+  const userFill  = document.getElementById('user-fill');
+
+  function paint() {
+    // route() ticks here as well as from onLevel. A silent source still emits
+    // zeros, but a STOPPED source emits nothing at all, and a purely event-driven
+    // router would freeze in whatever state it was last in. Ticking on rAF too is
+    // what lets 'thinking' time out into 'idle' with no audio anywhere.
+    route();
+    for (const p of pills) p.classList.toggle('on', p.dataset.state === orb.state);
+    agentFill.style.width = (agentLevel * 100).toFixed(1) + '%';
+    userFill.style.width  = (userLevel  * 100).toFixed(1) + '%';
+    requestAnimationFrame(paint);
+  }
+
+  // Two sources, one orb. listen() binds exactly one source, because one orb
+  // shows one level. A call has two signals, so both get subscribed with onLevel()
+  // and the orb is driven by hand through orb.level and orb.state. onLevel fires
+  // once per rendered frame on the library's own loop, so there is no second rAF
+  // here.
+
+  let agentSource = null, userSource = null;
+  let agentLevel = 0, userLevel = 0;
+
+  // Amplitude below which a channel counts as silent. Raise them if your room is
+  // noisy. The only tuning knobs in the router.
+  const AGENT_GATE = 0.045;
+  const USER_GATE  = 0.10;
+
+  // How long 'thinking' holds after the human stops before dropping to 'idle'.
+  // Real turn-taking latency is usually well under 2s.
+  const THINKING_TIMEOUT_MS = 6000;
+  // Brief hold so a natural pause mid-sentence does not flicker the state.
+  const HOLD_MS = 220;
+
+  // -Infinity, not 0. With 0 the (now - lastVoice < HOLD_MS) test is true for the
+  // first 220ms of the page's life, since performance.now() starts near zero, so
+  // the orb opens in 'speaking' before a single sample has been read. Only shows
+  // up on a fast first paint.
+  let lastUserVoice  = -Infinity;
+  let lastAgentVoice = -Infinity;
+
+  /**
+   * The router, and the part worth copying into your app.
+   *
+   * Precedence is deliberate: the agent speaking always wins, because a
+   * half-duplex barge-in should show the agent, and because the muted sink's echo
+   * of the agent's own voice leaks into an imperfectly cancelled mic.
+   */
+  function route() {
+    const now = performance.now();
+    if (agentLevel > AGENT_GATE) lastAgentVoice = now;
+    if (userLevel  > USER_GATE)  lastUserVoice  = now;
+
+    const agentTalking = now - lastAgentVoice < HOLD_MS;
+    const userTalking  = now - lastUserVoice  < HOLD_MS;
+
+    if (agentTalking) {
+      orb.level = agentLevel;          // the agent's voice modulates the galaxy
+      orb.state = 'speaking';
+    } else if (userTalking) {
+      orb.level = userLevel;           // the human's does
+      orb.state = 'listening';
+    } else if (Number.isFinite(lastUserVoice) && now - lastUserVoice < THINKING_TIMEOUT_MS) {
+      // The gap. Human finished, agent has not started. Most voice UIs never
+      // show this one.
+      orb.level = 0;
+      orb.state = 'thinking';
+    } else {
+      orb.level = 0;
+      orb.state = 'idle';
+    }
+  }
+
+  /** The agent's voice, off the inbound remote audio. */
+  function bindAgentStream(streamOrTrack) {
+    // fromStream covers the two things that silently break WebRTC audio analysis:
+    // it rebinds when a track arrives late (ontrack routinely fires before the
+    // audio track exists) and it attaches a muted keep-alive sink, without which
+    // Chrome will not pump a peer-connection stream through Web Audio at all.
+    // Disposing never stops the tracks; the call is not ours.
+    agentSource = OrbAudioSource.fromStream(streamOrTrack);
+    agentSource.start();                    // we start it, so we own it
+    // onLevel only records. route() runs once per frame in paint(), so there is
+    // one decision per frame no matter how many sources exist.
+    agentSource.onLevel((v) => { agentLevel = v; });
+  }
+
+  /** The human's voice, off the local mic. */
+  async function bindUserMic() {
+    userSource = await OrbAudioSource.microphone({ gain: 3.2 });
+    userSource.start();
+    userSource.onLevel((v) => { userLevel = v; });
+    return userSource.stream;               // the MediaStream, for the peer connection
+  }
+
+  const connectBtn = document.getElementById('connect');
+  const hangupBtn  = document.getElementById('hangup');
+  let pc = null;
+
+  connectBtn.addEventListener('click', async () => {
+    connectBtn.disabled = true;
+    note.textContent = 'Opening microphone...';
+
+    // From inside the gesture, before anything else touches Web Audio. Skip it
+    // and every analyser reads zero.
+    await resumeAudio();
+
+    // The human's side works identically in demo mode and in a real call.
+    let micStream = null;
+    try {
+      micStream = await bindUserMic();
+    } catch (err) {
+      console.warn('[demo] no microphone', err);
+      note.innerHTML = '<span class="warn">Microphone unavailable</span> - only the agent side will animate.';
+    }
+
+    // Ask our own backend for an ephemeral client secret.
+    let clientSecret = null;
+    try {
+      const res = await fetch(TOKEN_ENDPOINT, { method: 'POST' });
+      if (!res.ok) throw new Error('token endpoint returned ' + res.status);
+      const json = await res.json();
+      // Accept the couple of shapes a backend commonly returns. Adapt to yours.
+      clientSecret = json.client_secret && json.client_secret.value
+        ? json.client_secret.value
+        : (json.value || json.token || null);
+      if (!clientSecret) throw new Error('no client secret in the response body');
+    } catch (err) {
+      console.info('[demo] no realtime backend, running in demo mode:', err.message);
+    }
+
+    if (!clientSecret) { startDemoAgent(); return; }
+
+    try {
+      await startRealCall(clientSecret, micStream);
+    } catch (err) {
+      console.error('[demo] realtime connection failed', err);
+      note.innerHTML = '<span class="warn">Connection failed:</span> ' + err.message +
+        ' - falling back to demo mode.';
+      startDemoAgent();
+    }
+  });
+
+  /**
+   * Standard WebRTC. Nothing here is Orb-specific except the one bindAgentStream()
+   * call in ontrack.
+   *
+   * Check the SDP endpoint and model id against the current OpenAI Realtime docs,
+   * since those are the parts that change. The orb only needs the inbound
+   * MediaStream, which does not.
+   */
+  async function startRealCall(clientSecret, micStream) {
+    pc = new RTCPeerConnection();
+
+    // The only part that concerns Orb. The agent's voice arrives here: hand the
+    // stream to the orb, and to an <audio> element so the user can hear it.
+    pc.ontrack = (event) => {
+      const stream = event.streams[0] || new MediaStream([event.track]);
+      if (!agentSource) bindAgentStream(stream);
+
+      const el = document.createElement('audio');
+      el.autoplay = true;
+      el.srcObject = stream;
+      document.body.appendChild(el);       // hidden, but audible
+      el.style.display = 'none';
+    };
+
+    // Send the human's microphone up to the model.
+    if (micStream) for (const t of micStream.getAudioTracks()) pc.addTrack(t, micStream);
+
+    // The Realtime event channel: session updates, transcripts, function calls,
+    // turn events. A production app would drive orb.state from these as well as
+    // from amplitude, since they know about turn boundaries before any audio
+    // arrives.
+    const events = pc.createDataChannel('oai-events');
+    events.addEventListener('message', (e) => {
+      // left as a log, wire up the events you care about
+      console.debug('[realtime event]', e.data);
+    });
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    const res = await fetch('https://api.openai.com/v1/realtime?model=' + encodeURIComponent(MODEL), {
+      method: 'POST',
+      body: offer.sdp,
+      headers: {
+        // ephemeral secret, minted server-side, valid for minutes
+        Authorization: 'Bearer ' + clientSecret,
+        'Content-Type': 'application/sdp',
+      },
+    });
+    if (!res.ok) throw new Error('SDP exchange failed with ' + res.status);
+
+    await pc.setRemoteDescription({ type: 'answer', sdp: await res.text() });
+
+    hangupBtn.disabled = false;
+    note.innerHTML = 'Connected. Remote audio drives <code>speaking</code>, your mic drives <code>listening</code>.';
+  }
+
+  /**
+   * Demo mode. speech() synthesises audible babble (a sawtooth glottal source
+   * through swept formants) and routes it through the same analyser path a real
+   * agent's audio takes, so the routing above runs for real.
+   */
+  function startDemoAgent() {
+    let stopped = false;
+    const cycle = () => {
+      if (stopped) return;
+      // Talk for a while, then fall silent so the thinking gap is visible.
+      //
+      // Gain far above the 3.2 that suits real speech. speech() is a quiet demo
+      // tone (volume 0.09) and its RMS through two narrow bandpass formants lands
+      // near 0.03 at the default gain, under AGENT_GATE, so the orb would read the
+      // demo voice as silence. Real agent audio arrives at a normal broadcast
+      // level and wants the default.
+      agentSource = OrbAudioSource.speech({ volume: 0.09, gain: 26 });
+      agentSource.start();
+      agentSource.onLevel((v) => { agentLevel = v; });
+      setTimeout(() => {
+        if (stopped || !agentSource) return;
+        agentSource.stop();
+        agentSource = null;
+        agentLevel = 0;
+      }, 5200);
+      setTimeout(cycle, 11000);
+    };
+    // Pretend the human finished a turn a moment ago, so we open in 'thinking'
+    // rather than inside the brief 'listening' hold window.
+    lastUserVoice = performance.now() - HOLD_MS - 1;
+    setTimeout(cycle, 1600);
+    demoStop = () => { stopped = true; };
+
+    hangupBtn.disabled = false;
+    note.innerHTML = 'DEMO MODE - <code>OrbAudioSource.speech()</code> stands in for the agent. ' +
+      'Talk over it to see <code>listening</code>; the pause between turns is <code>thinking</code>.';
+  }
+  let demoStop = null;
+
+  hangupBtn.addEventListener('click', () => {
+    if (demoStop) { demoStop(); demoStop = null; }
+    if (pc) { try { pc.close(); } catch {} pc = null; }
+    // We started both sources, so we stop both. Stopping is terminal, so the next
+    // call builds fresh ones rather than restarting these.
+    if (agentSource) { agentSource.stop(); agentSource = null; }
+    if (userSource)  { userSource.stop();  userSource  = null; }
+    agentLevel = userLevel = 0;
+    lastUserVoice = lastAgentVoice = -Infinity;
+    orb.level = 0;
+    orb.state = 'idle';
+    for (const el of document.querySelectorAll('body > audio')) el.remove();
+    connectBtn.disabled = false;
+    hangupBtn.disabled = true;
+    note.textContent = 'Call ended.';
+  });
+
+  requestAnimationFrame(paint);
+  window.addEventListener('pagehide', () => orb.destroy());
+  window.orb = orb;
+</script>
+</body>
+</html>

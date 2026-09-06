@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orb - TTS playback</title>
+
+<!--
+  Orb by Earl Balai. TTS playback example.
+
+  An <audio> element of text-to-speech driving the 'speaking' state. This is the
+  shape of most non-streaming voice stacks: POST text to a provider, get an mp3
+  back, play it. The orb should move in time with it rather than run a canned
+  animation alongside.
+
+      const stop = orb.listenTo(audioEl);
+      orb.state = 'speaking';
+
+  That is the integration. The rest of the file is the two things that bite
+  people in production.
+
+  CORS first, because it is the one that costs a day.
+
+  A media element is only analysable if its audio is same-origin, or served with
+  permissive CORS headers AND loaded with crossOrigin="anonymous". Otherwise
+  createMediaElementSource hands back a tainted node, and two things happen with
+  no error reported anywhere: the analyser reads pure silence, and the element's
+  audio is dead for the rest of the page's life, because a
+  MediaElementAudioSourceNode can never be un-routed from its element.
+
+  So Orb checks first. fromMedia() tests whether the element is analysable and,
+  if it is not, falls back to a synthetic speech envelope gated on playback. A
+  moving orb next to audible speech beats a dead one. source.kind says which
+  path you got: 'media' is real analysis, 'synthetic' is the fallback.
+
+  Your side of the fix is one attribute and one response header:
+
+      <audio crossorigin="anonymous" src="https://tts.example.com/out.mp3">
+      Access-Control-Allow-Origin: https://your-app.example.com
+
+  Better still, proxy the TTS bytes through your own origin. Same-origin, always
+  analysable, and the provider key never reaches a browser.
+
+  Then the user gesture. createMediaElementSource permanently reroutes the
+  element's output through the AudioContext, and a suspended context (which is
+  what you have until the user interacts) means a silent element. So the first
+  listenTo(audioEl) has to happen inside a click handler, after resumeAudio().
+
+  The demo button synthesises a short WAV in-page and plays it from a blob: URL.
+  Blob URLs are same-origin by construction, so that path runs the real analyser
+  rather than the fallback.
+-->
+
+<style>
+  :root { --bg:#07080c; --panel:#11131a; --line:#232733; --fg:#e8ebf2;
+          --dim:#8b93a7; --accent:#7dd3fc; --warn:#fbbf24; --ok:#4ade80; }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+         padding:32px 20px; background:var(--bg); color:var(--fg);
+         font:14px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .card { width:100%; max-width:520px; background:var(--panel); border:1px solid var(--line);
+          border-radius:18px; padding:28px; text-align:center; }
+  h1 { margin:0 0 4px; font-size:17px; font-weight:600; letter-spacing:-0.01em; }
+  .sub { margin:0 0 22px; color:var(--dim); font-size:13px; }
+  #orb-slot { display:flex; justify-content:center; align-items:center; min-height:260px; }
+
+  .controls { display:flex; gap:10px; justify-content:center; margin-top:20px; flex-wrap:wrap; }
+  button { font:inherit; font-weight:550; padding:9px 18px; border-radius:999px;
+           border:1px solid var(--line); background:#1b1f29; color:var(--fg); cursor:pointer; }
+  button:hover:not(:disabled) { border-color:#39414f; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#06121a; }
+  button:disabled { opacity:0.4; cursor:default; }
+
+  .url { display:flex; gap:8px; margin-top:16px; }
+  input[type=url] { flex:1; font:12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+                    padding:9px 12px; border-radius:10px; border:1px solid var(--line);
+                    background:#0d1016; color:var(--fg); min-width:0; }
+
+  .meter { margin-top:20px; }
+  .track { height:5px; border-radius:3px; background:#1b1f29; overflow:hidden; }
+  .fill  { height:100%; width:0%; background:var(--accent); transition:width 60ms linear; }
+  .row { display:flex; justify-content:space-between; margin-bottom:6px;
+         font:11px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color:var(--dim); }
+
+  .note { margin-top:20px; padding-top:16px; border-top:1px solid var(--line);
+          color:var(--dim); font-size:12px; text-align:left; min-height:46px; }
+  .warn { color:var(--warn); }
+  .ok { color:var(--ok); }
+  code { font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color:#b7c0d4; }
+  audio { width:100%; margin-top:16px; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h1>TTS playback</h1>
+  <p class="sub">An &lt;audio&gt; element drives the speaking state.</p>
+
+  <div id="orb-slot"></div>
+
+  <div class="controls">
+    <button id="demo" class="primary">Play generated speech</button>
+    <button id="stop" disabled>Stop</button>
+  </div>
+
+  <div class="url">
+    <input id="url" type="url" placeholder="https://your-origin.example.com/tts/out.mp3" spellcheck="false">
+    <button id="load">Load</button>
+  </div>
+
+  <!-- Harmless for same-origin and blob: URLs, required for any cross-origin URL
+       you want to analyse. Without it the browser does not even ask for the CORS
+       headers. -->
+  <audio id="player" controls crossorigin="anonymous" preload="auto"></audio>
+
+  <div class="meter">
+    <div class="row"><span id="kind-label">source: -</span><span id="level-label">level 0.00</span></div>
+    <div class="track"><div class="fill" id="fill"></div></div>
+  </div>
+
+  <p class="note" id="note">
+    Press play for an in-page generated WAV. It is a blob: URL, so same-origin,
+    so the orb is analysing the real waveform.
+  </p>
+</div>
+
+<script type="module">
+  import {
+    createOrb,
+    OrbAudioSource,
+    resumeAudio,
+  } from '../src/orb.js';
+
+  const orb = createOrb(document.getElementById('orb-slot'), {
+    seed: 'tts-narrator',
+    size: 240,
+    state: 'idle',
+  });
+
+  const player     = document.getElementById('player');
+  const demoBtn    = document.getElementById('demo');
+  const stopBtn    = document.getElementById('stop');
+  const loadBtn    = document.getElementById('load');
+  const urlInput   = document.getElementById('url');
+  const fill       = document.getElementById('fill');
+  const levelLabel = document.getElementById('level-label');
+  const kindLabel  = document.getElementById('kind-label');
+  const note       = document.getElementById('note');
+
+  // Bind the element once. createMediaElementSource is one-shot per element (the
+  // second call throws), so Orb caches the graph per element and we never re-tap.
+  // Changing player.src later still works: the analyser sits downstream of the
+  // element, not of any particular file.
+  //
+  // fromMedia() also gates the level on playback, so a paused element reads 0 and
+  // the orb settles instead of pulsing at whatever the last sample was.
+
+  let detach = null;
+  let source = null;
+
+  async function ensureBound() {
+    if (source) return source;
+
+    // From the gesture. See the AudioContext note at the top of this file.
+    await resumeAudio();
+
+    source = OrbAudioSource.fromMedia(player, { gain: 3.2 });
+    detach = orb.listen(source);
+
+    // 'media'     -> real analyser, real waveform.
+    // 'synthetic' -> element not analysable (cross-origin without CORS), so a
+    //                gated speech envelope is standing in.
+    kindLabel.textContent = 'source: ' + source.kind;
+    return source;
+  }
+
+  // Playing is 'speaking', everything else is 'idle'. Re-assigning the state the
+  // orb is already in costs nothing, so these can fire as often as they like.
+
+  player.addEventListener('play',  () => { orb.state = 'speaking'; stopBtn.disabled = false; });
+  player.addEventListener('pause', () => { orb.state = 'idle'; });
+  player.addEventListener('ended', () => { orb.state = 'idle'; stopBtn.disabled = true; });
+
+  player.addEventListener('error', () => {
+    note.innerHTML = '<span class="warn">The audio element failed to load that URL.</span> ' +
+      'Check the path, and check that the response allows this origin.';
+  });
+
+  // Point this at whatever your TTS provider returned. In a real app you would
+  // not type a URL, you would do roughly:
+  //
+  //     const res  = await fetch('/api/tts', { method:'POST', body: text });
+  //     player.src = URL.createObjectURL(await res.blob());
+  //     await ensureBound();
+  //     await player.play();
+  //
+  // Fetching through your own origin and playing the blob: URL is the shape to
+  // copy. Always analysable, and the provider key stays on the server.
+
+  loadBtn.addEventListener('click', async () => {
+    const url = urlInput.value.trim();
+    if (!url) { note.textContent = 'Enter a URL first.'; return; }
+
+    player.src = url;
+    await ensureBound();
+    try {
+      await player.play();
+      const sameOrigin = isSameOrigin(url);
+      note.innerHTML = 'Playing <code>' + escapeHtml(url) + '</code>. Source kind: <code>' +
+        source.kind + '</code>. ' + (source.kind === 'media'
+          ? '<span class="ok">Real analysis.</span>'
+          : '<span class="warn">Fallback envelope</span> - the element is not analysable' +
+            (sameOrigin ? '.' : ', so the response needs an Access-Control-Allow-Origin header.'));
+    } catch (err) {
+      note.innerHTML = '<span class="warn">Playback was refused:</span> ' + escapeHtml(String(err.message));
+    }
+  });
+
+  // The demo clip. No network and no key: synthesise a few seconds of
+  // speech-shaped audio into a WAV, wrap it in a blob: URL, play it through the
+  // same <audio> element. blob: is same-origin, so this runs the real analyser
+  // path, which means the orb does here exactly what it will do with a provider
+  // mp3 once the CORS is right.
+
+  let demoUrl = null;
+
+  demoBtn.addEventListener('click', async () => {
+    if (!demoUrl) demoUrl = URL.createObjectURL(makeSpeechWav(6.5));
+    player.src = demoUrl;
+    await ensureBound();
+    try {
+      await player.play();
+      note.innerHTML = 'Playing a generated blob: WAV. Source kind: <code>' + source.kind +
+        '</code> - <span class="ok">the orb is measuring the real waveform</span>.';
+    } catch (err) {
+      note.innerHTML = '<span class="warn">Playback was refused:</span> ' + escapeHtml(String(err.message));
+    }
+  });
+
+  stopBtn.addEventListener('click', () => {
+    player.pause();
+    player.currentTime = 0;
+    orb.state = 'idle';
+    stopBtn.disabled = true;
+  });
+
+  /**
+   * Mono 16-bit PCM WAV of speech-shaped babble.
+   *
+   * A buzzy harmonic stack standing in for vocal folds, shaped by three
+   * incommensurate envelopes (phrase, word, syllable) plus a hard breath gate for
+   * the pauses. No speech content, just the shape and rhythm, which is all the
+   * orb responds to anyway.
+   */
+  function makeSpeechWav(seconds, rate = 22050) {
+    const n = Math.floor(seconds * rate);
+    // 44-byte canonical WAV header, then the samples.
+    const buf  = new ArrayBuffer(44 + n * 2);
+    const view = new DataView(buf);
+    const ascii = (off, s) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
+
+    ascii(0, 'RIFF');
+    view.setUint32(4, 36 + n * 2, true);
+    ascii(8, 'WAVE');
+    ascii(12, 'fmt ');
+    view.setUint32(16, 16, true);        // PCM chunk size
+    view.setUint16(20, 1, true);         // format 1 = PCM
+    view.setUint16(22, 1, true);         // mono
+    view.setUint32(24, rate, true);
+    view.setUint32(28, rate * 2, true);  // byte rate
+    view.setUint16(32, 2, true);         // block align
+    view.setUint16(34, 16, true);        // bits per sample
+    ascii(36, 'data');
+    view.setUint32(40, n * 2, true);
+
+    const TAU = Math.PI * 2;
+    for (let i = 0; i < n; i++) {
+      const t = i / rate;
+
+      // Envelopes: sentence shape, word shape, syllable beat, breath gate.
+      const phrase   = 0.55 + 0.45 * Math.sin(0.9 * t + 2 * Math.sin(0.37 * t));
+      const syllable = 0.60 + 0.40 * Math.sin(6.2 * t + 3 * Math.sin(2.3 * t));
+      const breath   = Math.sin(0.7 * t + 1.7) > -0.6 ? 1 : 0.05;
+      const env = phrase * syllable * breath;
+
+      // Glottal pitch, drifting rather than sitting flat.
+      const f0 = 116 + 9 * Math.sin(1.3 * t) + 3.5 * Math.sin(4.7 * t);
+      const ph = TAU * f0 * t;
+
+      // Formant-ish tilt: the strong 2nd and 5th partials land near where the
+      // first two formants of a mid vowel sit.
+      const s =
+        0.50 * Math.sin(ph) +
+        0.34 * Math.sin(ph * 2) +
+        0.16 * Math.sin(ph * 3) +
+        0.11 * Math.sin(ph * 5) +
+        0.06 * Math.sin(ph * 8);
+
+      // 0.28 keeps it comfortably below clipping once the envelope peaks.
+      const v = Math.max(-1, Math.min(1, 0.28 * env * s));
+      view.setInt16(44 + i * 2, v * 32767, true);
+    }
+    return new Blob([buf], { type: 'audio/wav' });
+  }
+
+  // page chrome
+
+  function isSameOrigin(url) {
+    try { return new URL(url, location.href).origin === location.origin; }
+    catch { return false; }
+  }
+  function escapeHtml(s) {
+    return s.replace(/[&<>"]/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
+  }
+
+  (function paint() {
+    const v = orb.level;
+    fill.style.width = (v * 100).toFixed(1) + '%';
+    levelLabel.textContent = 'level ' + v.toFixed(2);
+    requestAnimationFrame(paint);
+  })();
+
+  window.addEventListener('pagehide', () => {
+    if (detach) detach();
+    if (demoUrl) URL.revokeObjectURL(demoUrl);
+    orb.destroy();
+  });
+  window.orb = orb;
+</script>
+</body>
+</html>

@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Orb">
+  <title>Orb</title>
+  <!--
+    A miniature of the real thing: deep-space glass body, a tilted galactic band,
+    a Fresnel rim that brightens toward the limb, and a specular catchlight.
+
+    Tuned to survive 16px, which is the only size that actually matters. Fine
+    detail disappears there, so the silhouette, the rim arc and two or three
+    bright stars carry the whole icon; everything else is atmosphere.
+  -->
+  <defs>
+    <!-- glass body: lit from upper-left, falling to near-black at the limb -->
+    <radialGradient id="body" cx="36%" cy="30%" r="78%">
+      <stop offset="0%"   stop-color="#31406f"/>
+      <stop offset="42%"  stop-color="#141c38"/>
+      <stop offset="78%"  stop-color="#080c1a"/>
+      <stop offset="100%" stop-color="#04060e"/>
+    </radialGradient>
+
+    <!-- the band of dust and stars, brightest at its core -->
+    <radialGradient id="band" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#cfe0ff" stop-opacity="0.95"/>
+      <stop offset="35%"  stop-color="#8fb2ff" stop-opacity="0.55"/>
+      <stop offset="70%"  stop-color="#5c7fd6" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#5c7fd6" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- a warm core, the way a real galactic bulge sits against cool dust -->
+    <radialGradient id="core" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#ffe6c2" stop-opacity="0.9"/>
+      <stop offset="55%"  stop-color="#ffb877" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#ff9a4d" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Fresnel: transparent through the middle, ignited at the limb -->
+    <radialGradient id="fresnel" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#7cc8ff" stop-opacity="0"/>
+      <stop offset="72%"  stop-color="#7cc8ff" stop-opacity="0"/>
+      <stop offset="90%"  stop-color="#9fd4ff" stop-opacity="0.30"/>
+      <stop offset="100%" stop-color="#dff0ff" stop-opacity="0.85"/>
+    </radialGradient>
+
+    <linearGradient id="sheen" x1="18%" y1="8%" x2="72%" y2="82%">
+      <stop offset="0%"   stop-color="#ffffff" stop-opacity="0.55"/>
+      <stop offset="45%"  stop-color="#ffffff" stop-opacity="0.06"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+
+    <clipPath id="ball">
+      <circle cx="32" cy="32" r="30"/>
+    </clipPath>
+  </defs>
+
+  <!-- body -->
+  <circle cx="32" cy="32" r="30" fill="url(#body)"/>
+
+  <!-- everything inside the glass -->
+  <g clip-path="url(#ball)">
+    <!-- galactic band, tilted so the icon reads as a sphere with an axis -->
+    <g transform="rotate(-27 32 32)">
+      <ellipse cx="32" cy="32" rx="31" ry="10" fill="url(#band)"/>
+      <ellipse cx="32" cy="32" rx="13" ry="4.6" fill="url(#core)"/>
+      <!-- a dark dust lane cutting the band, which is what makes it read as
+           structure rather than a smudge -->
+      <ellipse cx="32" cy="34.4" rx="30" ry="2.5" fill="#05070f" opacity="0.5"/>
+    </g>
+
+    <!-- stars: a few bright ones do more at 16px than fifty faint ones -->
+    <g fill="#ffffff">
+      <circle cx="20" cy="20" r="1.5"/>
+      <circle cx="45" cy="42" r="1.25"/>
+      <circle cx="43" cy="17" r="0.95" opacity="0.85"/>
+      <circle cx="15" cy="40" r="0.85" opacity="0.75"/>
+      <circle cx="33" cy="48" r="0.7"  opacity="0.65"/>
+      <circle cx="52" cy="29" r="0.7"  opacity="0.6"/>
+      <circle cx="26" cy="34" r="0.6"  opacity="0.55"/>
+    </g>
+
+    <!-- specular sheen across the upper-left face -->
+    <circle cx="32" cy="32" r="30" fill="url(#sheen)"/>
+  </g>
+
+  <!-- rim ignition, drawn over the contents like real glass -->
+  <circle cx="32" cy="32" r="30" fill="url(#fresnel)"/>
+
+  <!-- a crisp edge so the silhouette holds at small sizes -->
+  <circle cx="32" cy="32" r="30" fill="none" stroke="#bfe0ff" stroke-opacity="0.45" stroke-width="1.2"/>
+
+  <!-- catchlight -->
+  <ellipse cx="22" cy="19" rx="6.2" ry="4.2" fill="#ffffff" opacity="0.22" transform="rotate(-32 22 19)"/>
+</svg>

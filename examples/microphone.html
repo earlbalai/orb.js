@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orb - Microphone</title>
+
+<!--
+  Orb by Earl Balai. Microphone example.
+
+  getUserMedia into the orb. Shortest path from nothing to a moving orb.
+
+  No build step: plain HTML plus one ES module import of ../src/orb.js. Serve
+  the repo root with any static server and open /examples/microphone.html.
+
+      python -m http.server 8080
+      npx serve .
+
+  Must be http://localhost or https://. getUserMedia needs a secure context, so
+  opening the file over file:// dies at the permission prompt, and the module
+  import would be blocked by CORS anyway.
+
+  Two browser audio rules, which between them are why everything here hangs off
+  one button:
+
+    1. An AudioContext created before the user has interacted starts SUSPENDED.
+       Every analyser on it reads exactly zero, so the orb sits still next to a
+       perfectly audible voice and nothing reports an error. resumeAudio() runs
+       inside the click handler to be sure the context is going.
+
+    2. getUserMedia wants a gesture too, or the browser refuses outright or
+       buries the prompt.
+-->
+
+<style>
+  :root {
+    --bg:     #07080c;
+    --panel:  #11131a;
+    --line:   #232733;
+    --fg:     #e8ebf2;
+    --dim:    #8b93a7;
+    --accent: #7dd3fc;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 20px;
+    background: var(--bg);
+    color: var(--fg);
+    font: 14px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .card {
+    width: 100%;
+    max-width: 460px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 28px;
+    text-align: center;
+  }
+  h1 { margin: 0 0 4px; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+  .sub { margin: 0 0 24px; color: var(--dim); font-size: 13px; }
+
+  /* Orb appends its own wrapper inside here and sizes it in CSS px, so the
+     slot only has to centre it. */
+  #orb-slot { display: flex; justify-content: center; min-height: 260px; align-items: center; }
+
+  .controls { display: flex; gap: 10px; justify-content: center; margin-top: 22px; }
+  button {
+    font: inherit;
+    font-weight: 550;
+    padding: 9px 18px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: #1b1f29;
+    color: var(--fg);
+    cursor: pointer;
+  }
+  button:hover:not(:disabled) { border-color: #39414f; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #06121a; }
+  button:disabled { opacity: 0.4; cursor: default; }
+
+  /* Raw level read-out. If it sits at 0.00 while you talk, either the
+     AudioContext never resumed or the wrong input device is selected. */
+  .meter { margin-top: 20px; }
+  .meter .track { height: 5px; border-radius: 3px; background: #1b1f29; overflow: hidden; }
+  .meter .fill  { height: 100%; width: 0%; background: var(--accent); transition: width 60ms linear; }
+  .row {
+    display: flex; justify-content: space-between;
+    font: 11px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: var(--dim); margin-bottom: 6px;
+  }
+  .note {
+    margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line);
+    color: var(--dim); font-size: 12px; text-align: left; min-height: 34px;
+  }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #b7c0d4; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h1>Microphone</h1>
+  <p class="sub">Your voice drives the orb.</p>
+
+  <div id="orb-slot"></div>
+
+  <div class="controls">
+    <button id="start" class="primary">Start microphone</button>
+    <button id="stop" disabled>Stop</button>
+  </div>
+
+  <div class="meter">
+    <div class="row"><span id="state-label">state: idle</span><span id="level-label">level 0.00</span></div>
+    <div class="track"><div class="fill" id="fill"></div></div>
+  </div>
+
+  <p class="note" id="note">Click start and allow microphone access.</p>
+</div>
+
+<script type="module">
+  // Native ES module. Nothing resolves the path for us, so the .js is required.
+  import {
+    createOrb,
+    OrbAudioSource,
+    resumeAudio,
+    audioReady,
+    isSupported,
+  } from '../src/orb.js';
+
+  const slot       = document.getElementById('orb-slot');
+  const startBtn   = document.getElementById('start');
+  const stopBtn    = document.getElementById('stop');
+  const fill       = document.getElementById('fill');
+  const levelLabel = document.getElementById('level-label');
+  const stateLabel = document.getElementById('state-label');
+  const note       = document.getElementById('note');
+
+  // Palette, archetype, galaxy structure and starting spin all derive from the
+  // seed. Change the string for a different orb, change it back and you get the
+  // same one again. None of it needs storing anywhere.
+  const orb = createOrb(slot, {
+    seed: 'earlbalai-microphone-demo',
+    size: 240,
+    state: 'idle',
+  });
+
+  // isSupported() probes WebGL itself rather than reading off a renderer that may
+  // not exist yet, so calling it either side of mounting is fine. Without WebGL
+  // the orb paints a seeded static gradient, still the right agent in the right
+  // colour, so this is a note and not an error.
+  if (!isSupported()) {
+    note.textContent = 'WebGL is unavailable here, so the orb is painting its seeded static fallback. Audio still works.';
+  }
+
+  // orb.level is the raw 0..1 amplitude driving the shader. Polled on rAF purely
+  // for this page's meter; the orb needs no help.
+  function paintMeter() {
+    const v = orb.level;
+    fill.style.width = (v * 100).toFixed(1) + '%';
+    levelLabel.textContent = 'level ' + v.toFixed(2);
+    stateLabel.textContent = 'state: ' + orb.state;
+    requestAnimationFrame(paintMeter);
+  }
+  requestAnimationFrame(paintMeter);
+
+  // The short version of this whole handler:
+  //
+  //     const stop = orb.listenTo('microphone');
+  //
+  // listenTo returns its disposer synchronously and handles the prompt itself.
+  // The longer route below only exists so a denied permission can be caught and
+  // turned into something visible instead of a dead orb.
+  let detach = null;   // unbinds the current source
+  let source = null;
+
+  startBtn.addEventListener('click', async () => {
+    startBtn.disabled = true;
+    note.textContent = 'Requesting microphone access...';
+
+    // Rule 1: resume the shared AudioContext from inside the gesture. The library
+    // arms its own gesture hook as a backstop, but explicit is more reliable.
+    await resumeAudio();
+
+    try {
+      // Prompts for permission, builds the analyser graph. Deliberately not
+      // connected to the speakers, so no feedback loop.
+      source = await OrbAudioSource.microphone({
+        gain: 3.2,             // scales RMS into 0..1, 3.2 suits speech
+        echoCancellation: true,
+      });
+
+      // listen() binds an existing source. We never called source.start(), so the
+      // orb owns it and stops it (releasing the mic, clearing the recording
+      // indicator) on unlisten or destroy. Start it yourself and the orb leaves it
+      // alone, which is what you want when several orbs share one microphone.
+      detach = orb.listen(source);
+
+      // Mic open means the human has the floor, so the agent is 'listening'.
+      // Assignment crossfades over roughly 350ms, and re-assigning the current
+      // state is free, so this is safe to write on every SDK event.
+      orb.state = 'listening';
+
+      stopBtn.disabled = false;
+      note.innerHTML = 'Listening. Source kind: <code>' + source.kind +
+        '</code>. AudioContext running: <code>' + audioReady() + '</code>.';
+    } catch (err) {
+      // Denied, no device, or an insecure context. Fall back to the audible
+      // synthetic voice rather than throwing, so there is still something to look
+      // at.
+      console.warn('[demo] microphone unavailable, falling back to speech()', err);
+      source = OrbAudioSource.speech();   // audible babble through the same analyser path
+      detach = orb.listen(source);
+      orb.state = 'speaking';
+      stopBtn.disabled = false;
+      note.innerHTML = 'Microphone unavailable (' + (err && err.name ? err.name : 'error') +
+        '). Running <code>OrbAudioSource.speech()</code> instead - what you hear is what the orb measures.';
+    }
+  });
+
+  // The disposer is idempotent and tears down only what this binding made. The
+  // orb owns the source here, so this stops the mic track too.
+  stopBtn.addEventListener('click', () => {
+    if (detach) detach();
+    detach = null;
+    source = null;
+    orb.state = 'idle';
+    startBtn.disabled = false;
+    stopBtn.disabled = true;
+    note.textContent = 'Stopped. The microphone track has been released.';
+  });
+
+  // For teardown inside an SPA. destroy() is idempotent and stops the source the
+  // orb owns.
+  window.addEventListener('pagehide', () => orb.destroy());
+
+  // handy in the console
+  window.orb = orb;
+</script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+node_modules/
+.vercel/
+.DS_Store
+
+# development scratch — superseded by src/
+build-a/
+build-b/
+build-c/
+orb/
+
+# third-party source, kept locally for reference only.
+# Must never be committed or published.
+reference/
+
+# agent scratch harness
+src/__verify.html
+src/__look.html
+src/__verify2.html
+
+# secrets — never commit
+.env
+.env.*
+!.env.example
