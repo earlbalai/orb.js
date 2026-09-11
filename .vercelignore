@@ -4,11 +4,11 @@
 # src/element.js and src/react.js are the actual bytes behind the public
 # https://xyorb.vercel.app/v1/... embed URLs. Never ignore src/ itself.
 
-# --- Development scratch — superseded by src/ ---
-build-a/
-build-b/
-build-c/
-orb/
+# --- Development scratch — superseded by src/ (anchored: native/android/orb is real) ---
+/build-a/
+/build-b/
+/build-c/
+/orb/
 
 # --- Third-party source, kept locally for reference only. Never deploy. ---
 reference/
@@ -18,6 +18,9 @@ reference/
 # __scratch.html in any directory can never reach the CDN.
 src/__*.html
 __*.html
+
+# --- Native SDKs (Swift / Kotlin / C++). Nothing in here is servable. ---
+native/
 
 # --- Local tooling / config ---
 .vercel/

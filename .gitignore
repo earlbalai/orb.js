@@ -2,15 +2,16 @@ node_modules/
 .vercel/
 .DS_Store
 
-# development scratch — superseded by src/
-build-a/
-build-b/
-build-c/
-orb/
+# development scratch — superseded by src/. Anchored to the root: native/android/orb/
+# is a real module and a bare "orb/" would swallow it.
+/build-a/
+/build-b/
+/build-c/
+/orb/
 
 # third-party source, kept locally for reference only.
 # Must never be committed or published.
-reference/
+/reference/
 
 # agent scratch harness
 src/__verify.html
@@ -21,3 +22,16 @@ src/__verify2.html
 .env
 .env.*
 !.env.example
+
+# native SDK build outputs
+native/apple/.build/
+native/apple/.swiftpm/
+native/apple/*.xcodeproj
+native/android/.gradle/
+native/android/build/
+native/android/*/build/
+native/android/local.properties
+native/android/.idea/
+native/windows/build/
+native/windows/out/
+native/android/.kotlin/

@@ -17,6 +17,7 @@ solved analytically inside the fragment shader.
 src/orb.js      the whole product
 index.html      landing page + live playground
 examples/       five runnable integrations
+native/         the same orb for iOS, macOS, Android and Windows
 ```
 
 ## Quick start
@@ -284,6 +285,27 @@ Runnable, self-contained, served from the same static server as everything else.
 `index.html` is the landing page and the full playground: seed, archetype, size, chromatic lens, all
 four states, an audible synthetic voice, the microphone, and the same orb rendered over a white card
 and a black one at once.
+
+## Native SDKs
+
+The web module is the reference, but the orb is not only web. [`native/`](native/) has the same
+orb for **iOS and macOS** (Swift + Metal, `OrbKit`), **Android** (Kotlin + OpenGL ES, plus a
+Compose wrapper) and **Windows** (C++ + Direct3D 11), each idiomatic to its platform and each
+with zero third-party dependencies.
+
+```swift
+Orb(seed: "agent-42", state: .thinking).orbAudio(mic)        // SwiftUI
+```
+```kotlin
+Orb(seed = "agent-42", state = OrbState.THINKING, audio = mic) // Compose
+```
+```cpp
+orb::Orb agent({.seed = "agent-42"});  agent.listen(orb::PCMSource::loopback());  // C++
+```
+
+Identity, the four-state dynamics and the galaxy shader are ported line for line and pinned to
+this module by a shared conformance suite, so `agent-42` is the same orb in a browser, on a phone
+and in a desktop app. The contract is [`native/SPEC.md`](native/SPEC.md).
 
 ## How it works
 

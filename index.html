@@ -405,7 +405,7 @@ footer .in { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; jus
 
   <!-- hero -->
   <header class="hero">
-    <p class="eyebrow">WebGL1 · zero dependencies · no build step</p>
+    <p class="eyebrow">WebGL1 · zero dependencies · no build step · native SDKs for iOS, Android &amp; Windows</p>
     <h1>The voice of an agent,<br><span>given a body.</span></h1>
     <p class="lede">A procedural galaxy sealed inside a glass sphere. The seed decides what it looks like,
       your agent's audio decides how it moves. No geometry anywhere in it: one four-vertex quad, and the
@@ -662,6 +662,123 @@ orb.<span class="f">destroy</span>();            <span class="c">// and everythi
     </div>
   </section>
 
+
+  <!-- native -->
+  <section>
+    <div class="sec-head">
+      <p class="eyebrow">native</p>
+      <h2>Not only web.</h2>
+      <p class="sub">The same orb for iOS, macOS, Android and Windows. Each SDK is idiomatic to its platform
+        and has zero third-party dependencies. Identity, the four-state dynamics and the galaxy shader are
+        ported line for line and pinned to this module by a shared conformance suite, so
+        <code>agent-42</code> is the same orb in a browser, on a phone and in a desktop app.</p>
+    </div>
+
+    <div class="install native-grid">
+      <div class="install-card">
+        <div class="install-head">
+          <span class="install-n">iOS · macOS</span>
+          <h3>OrbKit</h3>
+          <span class="pill-sm">SwiftPM</span>
+        </div>
+        <p>Swift + Metal, iOS 15 and macOS 12. A SwiftUI <code>Orb</code> view and a UIKit/AppKit
+          <code>OrbView</code> on a transparent Metal layer. Audio from an <code>AVAudioEngine</code> tap,
+          any PCM callback, or the microphone. The shader compiles from source at runtime, so there is no
+          metallib to ship.</p>
+        <p class="install-note"><a href="https://github.com/earlbalai/orb.js/tree/main/native/apple" rel="noopener">native/apple</a> · <code>swift test</code></p>
+      </div>
+
+      <div class="install-card">
+        <div class="install-head">
+          <span class="install-n">Android</span>
+          <h3>orb · orb-compose</h3>
+          <span class="pill-sm">AAR</span>
+        </div>
+        <p>Kotlin + OpenGL ES 2.0, API 21. <code>OrbView</code> is a <code>TextureView</code> on its own
+          EGL thread, so it composites with real alpha inside any layout, and <code>Orb()</code> is a one-line
+          composable. Audio from any PCM feed or <code>AudioRecord</code>. The galaxy GLSL is generated
+          verbatim from this module.</p>
+        <p class="install-note"><a href="https://github.com/earlbalai/orb.js/tree/main/native/android" rel="noopener">native/android</a> · <code>./gradlew :orb:testDebugUnitTest</code></p>
+      </div>
+
+      <div class="install-card">
+        <div class="install-head">
+          <span class="install-n">Windows</span>
+          <h3>orb</h3>
+          <span class="pill-sm">CMake · C++17</span>
+        </div>
+        <p>Direct3D 11, HLSL compiled at runtime. Draw into your own render target from a game or an engine,
+          or hand it an HWND. Audio through WASAPI: the microphone, or <b>loopback</b> of whatever the machine
+          is playing, which is how a desktop agent's own voice drives the orb without touching your playback
+          path.</p>
+        <p class="install-note"><a href="https://github.com/earlbalai/orb.js/tree/main/native/windows" rel="noopener">native/windows</a> · <code>orb_conformance.exe</code></p>
+      </div>
+    </div>
+
+    <div class="tabs" id="native-tabs" role="tablist" aria-label="Native SDK">
+      <button role="tab" data-tab="swift" aria-pressed="true">Swift</button>
+      <button role="tab" data-tab="kotlin" aria-pressed="false">Kotlin</button>
+      <button role="tab" data-tab="cpp" aria-pressed="false">C++</button>
+    </div>
+
+    <div class="snip" data-panel="swift">
+      <div class="snip-bar"><span class="snip-f">AgentView.swift</span><button class="copy ghost">copy</button></div>
+<pre><code><span class="k">import</span> OrbKit
+
+<span class="k">struct</span> <span class="f">AgentView</span>: View {
+  @State <span class="k">var</span> state: OrbState = .idle
+  <span class="k">let</span> mic = <span class="k">try</span>? OrbAudioSource.<span class="f">microphone</span>()
+
+  <span class="k">var</span> body: <span class="k">some</span> View {
+    <span class="f">Orb</span>(seed: <span class="s">"agent-42"</span>, size: <span class="s">320</span>, state: state)      <span class="c">// state crossfades over ~350 ms</span>
+      .<span class="f">orbAudio</span>(state == .listening ? mic : <span class="k">nil</span>)      <span class="c">// engine tap, PCM push, or the microphone</span>
+  }
+}
+
+<span class="c">// UIKit / AppKit</span>
+<span class="k">let</span> orb = <span class="f">OrbView</span>(seed: <span class="s">"agent-42"</span>, size: <span class="s">320</span>, state: .listening)
+orb.<span class="f">listen</span>(OrbAudioSource.<span class="f">tap</span>(engine.mainMixerNode))  <span class="c">// the agent's own TTS</span>
+orb.state = .speaking</code></pre>
+    </div>
+
+    <div class="snip" data-panel="kotlin" hidden>
+      <div class="snip-bar"><span class="snip-f">Agent.kt</span><button class="copy ghost">copy</button></div>
+<pre><code><span class="k">import</span> com.earlbalai.orb.compose.Orb
+
+@Composable
+<span class="k">fun</span> <span class="f">Agent</span>(state: OrbState, audio: OrbAudioSource?) {
+  <span class="f">Orb</span>(seed = <span class="s">"agent-42"</span>, size = <span class="s">320</span>.dp, state = state, audio = audio)
+}
+
+<span class="c">// or the View</span>
+<span class="k">val</span> orb = <span class="f">OrbView</span>(context)
+orb.<span class="f">update</span>(<span class="f">OrbOptions</span>(seed = <span class="s">"agent-42"</span>, state = OrbState.LISTENING))
+orb.<span class="f">listen</span>(OrbAudioSource.<span class="f">microphone</span>())    <span class="c">// or pcm().push(...) from your voice SDK</span>
+orb.state = OrbState.SPEAKING                <span class="c">// crossfades over ~350 ms</span></code></pre>
+    </div>
+
+    <div class="snip" data-panel="cpp" hidden>
+      <div class="snip-bar"><span class="snip-f">agent.cpp</span><button class="copy ghost">copy</button></div>
+<pre><code><span class="k">#include</span> <span class="s">&lt;orb/orb.h&gt;</span>
+
+orb::Renderer <span class="f">renderer</span>(device);              <span class="c">// once per D3D11 device; compiles the HLSL</span>
+orb::Options o; o.seed = <span class="s">"agent-42"</span>; o.size = <span class="s">320</span>;
+orb::Orb <span class="f">agent</span>(o);
+
+agent.<span class="f">listen</span>(orb::PCMSource::<span class="f">loopback</span>());   <span class="c">// whatever the machine is playing: the agent's TTS</span>
+agent.<span class="f">setState</span>(orb::State::Speaking);
+
+<span class="c">// per frame, into your own render target</span>
+agent.<span class="f">tick</span>(nowSeconds);
+agent.<span class="f">draw</span>(renderer, ctx, backBufferRTV, {x, y, agent.<span class="f">pixels</span>(dpi)}, dpi,
+           orb::Composite::OverExisting);
+
+<span class="c">// or just a window</span>
+orb::Window <span class="f">win</span>(hwnd, o);
+win.<span class="f">frame</span>();                                <span class="c">// tick, clear, draw, present</span></code></pre>
+    </div>
+  </section>
+
   <!-- how -->
   <section>
     <div class="sec-head">
@@ -714,6 +831,7 @@ orb.<span class="f">destroy</span>();            <span class="c">// and everythi
         <p class="small">MIT © Earl Balai · v1.0.0 · zero dependencies</p>
         <p class="small" style="margin-top:6px">
           <a href="https://github.com/earlbalai/orb.js" rel="noopener">Source on GitHub</a>
+          · <a href="https://github.com/earlbalai/orb.js/tree/main/native" rel="noopener">Native SDKs</a>
           · <a href="https://github.com/earlbalai/orb.js/blob/main/LICENSE" rel="noopener">MIT licence</a>
         </p>
         <p class="small" style="margin-top:6px;max-width:52ch">Rendering approach inspired by the agent orb on
@@ -730,6 +848,10 @@ orb.<span class="f">destroy</span>();            <span class="c">// and everythi
     display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
     gap: 14px; margin-bottom: 26px;
   }
+  .native-grid { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .install-card p code { font-family: var(--mono); font-size: 12px; color: var(--ink) }
+  .install-note a { color: var(--accent); text-decoration: none }
+  .install-note a:hover { text-decoration: underline }
   .install-card {
     padding: 20px 22px 22px; border-radius: var(--r2);
     border: 1px solid var(--line-2); background: var(--card);
@@ -1219,15 +1341,18 @@ extras.push(createOrb($('logo-orb'), { seed: 'earlbalai', size: 26, state: 'thin
 
 /* embed tabs */
 
-for (const b of $('tabs').querySelectorAll('[data-tab]')) {
-  b.addEventListener('click', () => {
-    for (const other of $('tabs').querySelectorAll('[data-tab]')) {
-      other.setAttribute('aria-pressed', String(other === b));
-    }
-    for (const p of document.querySelectorAll('[data-panel]')) {
-      p.hidden = p.dataset.panel !== b.dataset.tab;
-    }
-  });
+// Two groups on the page (embed, native). Each one owns the panels that follow it
+// inside its own section, so switching one never hides the other.
+for (const tabs of document.querySelectorAll('.tabs[role="tablist"]')) {
+  const panels = tabs.closest('section').querySelectorAll('[data-panel]');
+  for (const b of tabs.querySelectorAll('[data-tab]')) {
+    b.addEventListener('click', () => {
+      for (const other of tabs.querySelectorAll('[data-tab]')) {
+        other.setAttribute('aria-pressed', String(other === b));
+      }
+      for (const p of panels) p.hidden = p.dataset.panel !== b.dataset.tab;
+    });
+  }
 }
 
 for (const btn of document.querySelectorAll('.snip .copy')) {
